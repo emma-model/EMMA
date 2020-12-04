@@ -1,0 +1,30 @@
+**/scen
+**/start
+**/trash
+**/225a
+**/.idea
+**/.ipynb_checkpoints
+
+**/*.gdx
+**/*.log
+**/*.txt
+**/*.lst
+**/*.lxi
+
+*.o10
+*.op*
+*~*
+**__
+
+#allows only .py and .csv in folder calibration
+_simulation/*
+_pickle/*
+_figure/*
+
+#no need to track as it is generated automatically
+**calibration.csv
+
+#allows .xlsx only in input
+**/*.xlsx
+!input/*.xlsx
+225c/
