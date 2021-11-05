@@ -1,0 +1,18 @@
+* Runs additinal utilities when probem infeasible
+iis=1
+
+* Opportunistic parallel search (-1) vs deterministic parall. serach (1)
+* Set to 1 for Model feature analysis?
+parallelmode=-1
+
+* Slower but more memory-efficient
+memoryemphasis=1
+
+* Set to 0 to skip (i.e. use indexes)
+names=1
+
+* Set to 0 to skip, 2 to fully activate
+datacheck=2
+
+* https://www.gams.com/latest/docs/S_CPLEX.html
+lpmethod=6

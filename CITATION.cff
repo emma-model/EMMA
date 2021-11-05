@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Hirth
+    given-names: Lion
+  - family-names: Sgarlato
+    given-names: Raffaele
+  - family-names: Ruhnau
+    given-names: Oliver
+title: "The European Electricity Market Model EMMA - Model Code"
+url: https://github.com/emma-model/EMMA/tree/v1.0
+version: v1.0
+date-released: 2021-11-05
