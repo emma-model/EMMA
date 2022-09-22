@@ -42,8 +42,10 @@ $if not set WeatherYEAR          $set WeatherYEAR        2016
 $if not set SI                   $set SI                 none
 * Constraint scenarios
 $if not set SC                   $set SC                 none
-* Export: ts or const
-$if not set EXPORT               $set EXPORT             ts
+* Export: 
+$if not set EXOEXPORT            $set EXOEXPORT          0
+* Exogenous Demand profiles:
+$if not set EXOLOAD              $set EXOLOAD            0
 * Avail: ts or seasonal
 $if not set AVAIL                $set AVAIL              ts
 
@@ -69,6 +71,9 @@ $IFi %REGIONS%== '3R'            $set r                  GER,SWE,FRA
 $IFi %REGIONS%== '2R'            $set r                  GER,SWE
 $IFi %REGIONS%== '1R'            $set r                  GER
 
+$IFi %REGIONS%=='sEU'            $set r                  GER,SWE,FRA,POL,NLD,BEL,NOR,AUT,CHE,CZE,DNK,GBR,GRC
+$IFi %REGIONS%=='sGR'            $set r                  GRC
+
 *---------------------------------------------------------------------------------------------------------------------------
 *---------------------------------------------------------------------------------------------------------------------------
 *
@@ -88,32 +93,35 @@ $include scenarios.gms
 *---------------------------------------------------------------------------------------------------------------------------
 
 SET
-allt                     all possible hours      /1*8760/
-allr                     all possible regions    /GER,SWE,FRA,NLD,IRL,GBR,PRT,ESP,BEL,LUX,DNK,DKW,DKE,NOR,FIN,CHE,ITA,AUT,SVN,POL,CZE,SVK,HUN,GRC,ROU,HRV,BIH,SRB,MNE,MKD,BGR,CHN,SE1*SE4,NO1*NO5,all/
-alltec                   all possible techs      /nucl,lign,coal,CCGT,lign_CCS,coal_CCS,CCGT_CCS,OCGT,CCGT_H2,OCGT_H2,shed,wion,wiof,solar,PHS,batr,hydr,ror,bio,PtHydrogen/
-allvin                   all vintages incl. new  /1,2,3,new/
-allyear                  all weather years       /1990*2030/
-allh                     all horizons            /1990,2008*2019,2030,2040,2050,LTE/
-allpro                   all project             /DEFAULT,DEFAULTLTE/
+allt                     all possible hours                 /1*8760/
+allr                     all possible regions               /GER,SWE,FRA,NLD,IRL,GBR,PRT,ESP,BEL,LUX,DNK,DKW,DKE,NOR,FIN,CHE,ITA,AUT,SVN,POL,CZE,SVK,HUN,GRC,ROU,HRV,BIH,SRB,MNE,MKD,BGR,CHN,SE1*SE4,NO1*NO5,all,EXO/
+alltec                   all possible techs                 /nucl,lign,coal,CCGT,lign_CCS,coal_CCS,CCGT_CCS,OCGT,CCGT_H2,OCGT_H2,shed,wion,wiof,solar,PHS,batr,hydr,ror,bio,PtHydrogen/
+allvin                   all vintages incl. new             /1,2,3,new/
+allyear                  all weather years                  /1990*2030/
+allh                     all horizons                       /1990,2008*2019,2030,2040,2050,LTE/
+allpro                   all project                        /historical,SENTINEL_EU_CN,SENTINEL_EU_EN,SENTINEL_EU_CT,SENTINEL_GRC_RF,SENTINEL_GRC_RE,SENTINEL_GRC_PX,DEFAULT,DEFAULTLTE/
 
-h_years(allh)            horizon years (non-LTE) /2016,2030,2040,2050/
-today(allh)              today’s year            /2016/
+horizons(allh)           horizon years (non-LTE)            /2016,2030,2040,2050/
+today(allh)              today’s year                     /2016/
 
-t(allt)                  hour of the year        /1*%HOURS%/
-ti(t)                    short for reporting     /1*100/
+t(allt)                  hour of the year                   /1*%HOURS%/
+ti(t)                    short for reporting                /1*100/
 
-rall(allr)               regions included + all  /%r%,all/
-r(rall)                  regions included        /%r%/
-r_h(allr)                regions with hydro      /AUT,CHE,CZE,FRA,GBR,GER,GRC,NOR,NO1*NO5,SWE,SE1*SE4/
-r_p(allr)                regions with PHS        /AUT,BEL,CHE,CZE,FRA,GER,POL,GRC/
-r_t(allr)                regions thermal only    //
-r_l(allr)                regions with lignite    /GER,POL,CZE, GRC/
-r_c(allr)                regions with new coal   /POL,CZE/
-r_o(allr)                regions with offshore   /BEL,DNK,FRA,GBR,GER,NLD,NOR,POL,SWE/
-r_not(allr)              regions not included    //
-r_FRA(allr)              for 1R model runs       /FRA/
-r_SWE(allr)              for 1R model runs       /SWE/
-r_POL(allr)              for 1R model runs       /POL/
+rall(allr)               regions included + all             /%r%,all/
+r_plus_exo(allr)         regions included + EXO             /%r%,EXO/
+r_exo(r_plus_exo)        Region EXO for exogenous exports   /EXO/
+r(r_plus_exo)            regions included                   /%r%/
+
+r_h(allr)                regions with hydro                 /AUT,CHE,CZE,FRA,GBR,GER,GRC,NOR,NO1*NO5,SWE,SE1*SE4/
+r_p(allr)                regions with PHS                   /AUT,BEL,CHE,CZE,FRA,GER,POL,GRC/
+r_t(allr)                regions thermal only               //
+r_l(allr)                regions with lignite               /GER,POL,CZE, GRC/
+r_c(allr)                regions with new coal              /POL,CZE/
+r_o(allr)                regions with offshore              /BEL,DNK,FRA,GBR,GER,NLD,NOR,POL,SWE/
+r_not(allr)              regions not included               //
+r_FRA(allr)              for 1R model runs                  /FRA/
+r_SWE(allr)              for 1R model runs                  /SWE/
+r_POL(allr)              for 1R model runs                  /POL/
 
 * RS: Consider to construct sets using: https://support.gams.com/gams:union_two_different_sets
 *     to ensure not only sub-set relations but dynamic assignment and set disjointment (where applicable)
@@ -134,23 +142,23 @@ tec_chp(tec_thm)         CHP techs                          /lign,coal,CCGT,lign
 tec_h2g(tec_thm)         plants running on H2               /CCGT_H2,OCGT_H2/
 
 tec_con(tec_demand)      consumption technologies           /PtHydrogen/     //here we should add electic boliers (i.e. PtHeat)
-tec_h2d(tec_con)         consumption technologies /PtHydrogen/
+tec_h2d(tec_con)         consumption technologies           /PtHydrogen/
 
-par_sto                  storage parameters      /power,energy/
-par_cost                 cost parameters         /invest,invest_chp,energy,lifetime,qfixcost,varcost,balancing,co2int,eff_new,rp_depriciation,rp_fuel,rp_constraint,rt_premium,flex_premium, availability/
-par_cost_misc            cost scalar parameters  /discountrate,curtailment/
+par_sto                  storage parameters                 /power,energy/
+par_cost                 cost parameters                    /invest,invest_chp,energy,lifetime,qfixcost,varcost,balancing,co2int,eff_new,rp_depriciation,rp_fuel,rp_constraint,rt_premium,flex_premium, availability/
+par_cost_misc            cost scalar parameters             /discountrate,curtailment/
 
-vin(allvin)              vintages without new    /1,2,3/
-new(allvin)              ohly new vintage        /new/
+vin(allvin)              vintages without new               /1,2,3/
+new(allvin)              ohly new vintage                   /new/
 
-peak                     peak and off-peak       /p,op/
-day_year                 day of year             /1*365/
-week_year                week of year            /1*53/
-month_year               month of year           /1*12/
-hour_day                 hour of day             /1*24/
-hour_week                hour of week            /1*168/
-day_week                 day of week             /1*7/
-season                   season                  /winter,spring,summer,fall/
+peak                     peak and off-peak                  /p,op/
+day_year                 day of year                        /1*365/
+week_year                week of year                       /1*53/
+month_year               month of year                      /1*12/
+hour_day                 hour of day                        /1*24/
+hour_week                hour of week                       /1*168/
+day_week                 day of week                        /1*7/
+season                   season                             /winter,spring,summer,fall/
 
 t_peak                   mapping
 t_day_year               mapping
@@ -166,7 +174,7 @@ time(allt,peak,day_year,week_year,month_year,hour_day,hour_week,day_week,season)
 
 SINGLETON SET
 weather_year(allyear)    weather year from clp          /%WeatherYEAR%/
-h_year(allh)             year of the horizon from clp   /%HORIZON%/
+horizon(allh)             year of the horizon from clp   /%HORIZON%/
 ;
 
 
@@ -238,7 +246,6 @@ i_exp0(allr,allh,allr)
 
 i_chp(allt,allr,allyear)
 i_load(allt,allpro,allr,allyear)
-i_export(allt,allr,allyear)
 i_avail(allt,allr,allyear,alltec)
 i_solar(allt,allpro,allr,allyear)
 i_solar_future(allt,allpro,allr,allyear)
@@ -247,14 +254,19 @@ i_wion_future(allt,allpro,allr,allyear)
 i_wiof(allt,allpro,allr,allyear)
 i_wiof_future(allt,allpro,allr,allyear)
 
+i_exo_export(allt,allpro,allr,allh)
+
+i_exo_load(allt,*,allr,allh)
+i_exo_h2_demand(allpro,allr,allh)
+
 * Model Parameters (no prefix)
 load(t,r)                       hourly load                                     (GW)                    [loaded as MW]
-load_mod(t,r)                   load - exogenous gen (bio and ror) + exports    (GW)
 h2_demand_exo(r)                non-electricity exognous hydrogen demand        (GWh)
 
 profile(t,*,allr)               profiles for vre & exo & hydro & CHP - not load (GW per GW installed | sum up to FLH)
 CHP_profile(t,tec_chp,*,r)      min and max profiles for CHP                    (1)
-export(t,r)                     export to non-modeled regions                   (GW)
+exo_export(t,r)                 export to non-modeled regions                   (GW)
+exo_load(t,r)                   exogenous load profiles                         (GWh)
 
 discountrate                    discount rate                                   (1)
 co2(r)                          CO2-price                                       (EUR per t)
@@ -274,7 +286,7 @@ fuel_ramping(tec_thm,r)         fuel consumed by ramping up a plant             
 run_through(alltec)             run through premium                             (MEUR per GWa)
 
 co2_int(tec_thm,r)              carbon intensitiy                               (t per GWh thermal)
-cost_ramping(tec_thm,r)  
+cost_ramping(tec_thm,r)
 
 rp_depriciation(tec_thm)        depriciation cost because of ramping            (EUR per MW)
 rp_fuel(tec_thm)                fuel consumption because of ramping             (MW_th per MW_el)
@@ -316,12 +328,16 @@ th                       /1000/
 mn                       /1000000/
 little                   /0.0000001/
 sc                       scale parameter for t<8760
-tmp_r(allr)             
+tmp_r(allr)
 tmp_x_r(*,r)
 ;
 
 * Scaling parameter
 sc                       = 8760 / card(t);
+
+* prefilling
+exo_export(t,r)          = 0;
+exo_load(t,r)            = 0;   
 
 
 *---------------------------------------------------------------------------------------------------------------------------
@@ -336,7 +352,7 @@ sc                       = 8760 / card(t);
 * a) Read in from GDX (i_*)
 *===============================================================
 
-* Convert Excel into GDX 
+* Convert Excel into GDX
 $IF %LOADDATA% == '1'            $include loaddata.gms
 
 * Non-time series data from data.xlsx
@@ -349,8 +365,15 @@ $LOADdc i_capa0, i_energy0, i_invemin, i_invemax, i_chp0, i_chp_tot, i_gene0, i_
 
 * Time series data from data_ts.xlsx
 $GDXIN data_ts.gdx
-$LOADdc time, i_chp, i_load, i_export, i_avail, i_solar, i_solar_future, i_wion, i_wion_future, i_wiof, i_wiof_future
+$LOADdc time, i_chp, i_load, i_avail, i_solar, i_solar_future, i_wion, i_wion_future, i_wiof, i_wiof_future
 
+* Exogenous exports from exoexport.xlsx
+$GDXIN exoexport.gdx
+$LOADdc i_exo_export
+
+* Exogenous demand from exoload.xlsx
+$GDXIN exoload.gdx
+$LOADdc i_exo_load, i_exo_h2_demand
 
 *===============================================================
 * b) Override inputs according to input scenarios %SI%
@@ -376,14 +399,10 @@ loop(time(t,peak,day_year,week_year,month_year,hour_day,hour_week,day_week,seaso
     t_season(t,season)               = yes;
 );
 
-
 *** TIME SERIES
 
 * Select weather year
 load(t,r)            = i_load(t,"%PROJECT%",r, weather_year) / th;
-
-$IFi %EXPORT%=='const' export(t,r)          = 1;
-$IFi %EXPORT%=='ts'    export(t,r)          = i_export(t,r, weather_year) / th;
 
 $IFi %FUTUREVRE%=='0'  profile(t,"solar",r) = i_solar(t,"%PROJECT%",r,weather_year);
 $IFi %FUTUREVRE%=='0'  profile(t,"wion",r)  = i_wion(t,"%PROJECT%",r,weather_year);
@@ -397,12 +416,24 @@ $IFi %FUTUREVRE%=='1'  profile(t,"wiof",r)  = i_wiof_future(t,"%PROJECT%",r,weat
 tmp_r(r)        = sum(t, load(t,r));
 load(t,r)       = load(t,r) / tmp_r(r) * i_yload(r,"Electricity","%HORIZON%") * th / sc;
 
+$IFTHENi %EXOLOAD%=='1'
+    tmp_r(r) = sum(t, exo_load(t,r));
+    load(t,r)$tmp_r(r) = exo_load(t,r);
+$ENDIF
+
+display load, exo_load, i_exo_h2_demand;
+
+* Exogenous export profiles
+
+$IFTHENi %EXOEXPORT%=='1'
+    tmp_r(r) = sum(t, exo_export(t,r));
+    exo_export(t,r)$(tmp_r(r)=0) = (sum(r_not,i_exp0(r,"%WeatherYEAR%",r_not))-sum(r_not,i_exp0(r_not,"%WeatherYEAR%",r)))/8760*th;
+$ENDIF
+
+display exo_export, i_yload;
+
 * Load exogenous hydrogen demand
 h2_demand_exo(r) = i_yload(r,"Hydrogen","%HORIZON%") * th / sc;
-
-* Scale export profile to yearly values (from Eurostat)
-tmp_r(r)        = sum(t, export(t,r));
-export(t,r)$tmp_r(r)     = export(t,r) / tmp_r(r) * (sum(r_not,i_exp0(r,"%HORIZON%",r_not)) - sum(r_not,i_exp0(r_not,"%HORIZON%",r))) * th / sc;
 
 * Scale renewable profiles to FLH (historical or assumption on new)
 tmp_x_r(tec_vre,r)$sum(vin, i_capa0(tec_vre,vin,"%WeatherYEAR%",r)) = sum(t,profile(t,tec_vre,r)) * sc;
@@ -429,7 +460,7 @@ tmp_r(r)              = sum(t,profile(t,"CHP",r));
 profile(t,"CHP",r)    = profile(t,"CHP",r) / tmp_r(r) * (i_gene0("chp_res","%PROJECT%","%WeatherYEAR%",r)
                         + i_gene0("chp_com","%PROJECT%","%WeatherYEAR%",r))
                         + 1/8760 * i_gene0("chp_ind","%PROJECT%","%WeatherYEAR%",r);
-                        
+
 tmp_r(r)              = smax(t,profile(t,"CHP",r));
 profile(t,"CHP",r)    = profile(t,"CHP",r) / tmp_r(r);
 
@@ -466,19 +497,19 @@ cost_chp(tec_inv)         = i_cost(tec_inv,"*","invest_chp") * ((1+discountrate)
 * qfixed cost incl. balancing cost
 cost_qfix(alltec)         = (i_cost(alltec,"%HORIZON%","qfixcost") + run_through(alltec)*(8+2)) / sc;                                                                   // 8 to allocate run-through premium to FC, 2 for actual occured start-ups - but what if a plant runs less than 8000 hours!?!?!? - THIS IS A BUG
 cost_bal(tec_vre)         = i_cost(tec_vre,"*","balancing")*sum((t,r),profile(t,tec_vre, r))/card(r)/th;                                                                // VRE balancing costs in EUR/MWh
-cost_qfix(tec_vre)        = cost_qfix(tec_vre) + cost_bal(tec_vre);                                                                                                     // RES balancing costs are added to qfix costs -> taken as independent from generation 
+cost_qfix(tec_vre)        = cost_qfix(tec_vre) + cost_bal(tec_vre);                                                                                                     // RES balancing costs are added to qfix costs -> taken as independent from generation
 
 * flexibility premium to fix and quasi-fix costs
-cost_inv(tec_inv)       = cost_inv(tec_inv)  * i_cost(tec_inv,"*","flex_premium"); 
+cost_inv(tec_inv)       = cost_inv(tec_inv)  * i_cost(tec_inv,"*","flex_premium");
 cost_qfix(tec_inv)      = cost_qfix(tec_inv) * i_cost(tec_inv,"*","flex_premium");                                                                     // qfix are scaled down as well (not only fix)
 
 * var costs
 eff(alltec)              = i_cost(alltec,"%HORIZON%","eff_new");
-loop(h_year,
-    cost_fuel(alltec)        = i_fuel(alltec,"%PROJECT%",h_year);
-    co2(r)                   = i_co2("ETS","%PROJECT%",h_year);
+loop(horizon,
+    cost_fuel(alltec)        = i_fuel(alltec,"%PROJECT%",horizon);
+    co2(r)                   = i_co2("ETS","%PROJECT%",horizon);
     loop(r,
-        co2(r)$i_co2(r,"%PROJECT%",h_year) = i_co2(r,"%PROJECT%",h_year);
+        co2(r)$i_co2(r,"%PROJECT%",horizon) = i_co2(r,"%PROJECT%",horizon);
     );
 );
 
@@ -502,9 +533,9 @@ $IFTHENE.hydrogen_balance %H2B%=='1'
 
     h2_transportation_cost = sum(tec_h2g, cost_fuel(tec_h2g))/card(tec_h2g) + sum(tec_h2d, cost_fuel(tec_h2d))/card(tec_h2d);
     h2_import_price = (sum(tec_h2g, cost_fuel(tec_h2g))/card(tec_h2g) - h2_transportation_cost) / th;
-    
+
     cost_fuel(tec_h2g) = h2_transportation_cost; // This is the base price. The actual will include the margnial of the hydrogen balance
-    cost_fuel(tec_h2d) = 0;     	             // This is the base price. The actual will include the margnial of the hydrogen balance 
+    cost_fuel(tec_h2d) = 0;     	             // This is the base price. The actual will include the margnial of the hydrogen balance
 $ELSE.hydrogen_balance
     h2_import_price = 0;
 $ENDIF.hydrogen_balance
@@ -529,12 +560,6 @@ cost_energy(tec_sto)     = cost_energy(tec_sto) * i_cost(tec_sto,"*","flex_premi
 
 * NTC costs
 cost_NTC                 = 3.4 * ((1+discountrate)**40*discountrate)/((1+discountrate)**40-1) / sc;
-
-
-*** ENERGY BALANCE
-
-* Add net exports to non-modeled countries
-load_mod(t,r)   = load(t,r) + export(t,r);
 
 
 *** CAPACITY CONSTRAINTS
@@ -643,13 +668,13 @@ co2_cap(r)          = i_CO2cap(r,"%PROJECT%", "%HORIZON%") * mn / sc;
 *===============================================================
 * c) Check input integrity
 *===============================================================
-$if not     set ID          $set ID    
+$if not     set ID          $set ID
 File log    "log file for debugging and warning messages"         /log_WARNING_%ID%.dat/;
 
 
 loop((tec_chp,vin,allh,allr),
     if (i_capa0(tec_chp,vin,allh,allr) <  i_chp0(tec_chp,vin,allh,allr),
-            put log;        
+            put log;
             put "CHP capcacity larger than allowed" i_chp0(tec_chp,vin,allh,allr) '>' i_capa0(tec_chp,vin,allh,allr) /;
             put '- technology:' tec_chp.tl:0 /;
             put '- vintage:   ' vin.tl:0     /;
@@ -664,7 +689,7 @@ loop(tec_inv,
             put 'Lifetime of ' tec_inv.tl:0 'appears to be be 0' /;
             abort "Lifetime of a tec_inv technology cannot be 0 (check log.dat file)";
     ));
-    
+
 
 loop((r, tec_exo, vin),
     if ( (capa0(tec_exo, vin,r) > 0) and (sum(t, profile(t,tec_exo,r)) = 0),
@@ -673,19 +698,22 @@ loop((r, tec_exo, vin),
             // capa0(tec_exo, allvin,r) = 0;
     ));
 
+
+
 loop((r, tec_vre, vin),
     if ( (capa0(tec_vre, vin,r) > 0) and (sum(t, profile(t,tec_vre,r)) = 0),
             put log;
             put 'Capa0 but no profile for tec:' tec_vre.tl:0 ', vin:' vin.tl:0 ' and region:' r.tl:0 '; ' capa0(tec_vre, vin,r) ' GW affected'/;
             // capa0(tec_vre, allvin,r) = 0;
     ));
-    
+
 loop((r, tec_vre),
     if ( (sum(vin, i_gene0(tec_vre, "%PROJECT%", "%WeatherYEAR%",r)) > 0) and  (sum(vin, i_capa0(tec_vre,vin,"%WeatherYEAR%",r)) = 0),
             put log;
             put 'Gene0 but no capa0 profile for tec:' tec_vre.tl:0 ' and region:' r.tl:0/;
             // capa0(tec_vre, allvin,r) = 0;
     ));
+
 
 *---------------------------------------------------------------------------------------------------------------------------
 *---------------------------------------------------------------------------------------------------------------------------
@@ -710,7 +738,7 @@ DECOCHP(tec_chp,vin,r)           decomissioned CHP capa            (GW)
 ASC(r)                           ancillary service - must run      (GW)
 INVESTO(tec_sto,new,r)           investment in storage             (GWh)
 NTCINV(r,rr)                     new trans capacity                (GW)
-                                                                      
+
 * Dispatch (and other hourly variables)
 SUPPLY(t,tec_supply,allvin,r)       supply - gene and sto discharge   (GW)
 DEMAND(t,tec_demand,allvin,r)       demand - cons and sto charge      (GW)
@@ -726,8 +754,8 @@ H2_IMPORTS(r)                       Hydrogen imports with fixed price (GWh therm
 
 VARIABLES
 COST                                total system cost                 (MEUR)
-FLOW(t,r,rr)                        exports from r to rr              (GW)
-HydrogenSupply(r) 
+FLOW(t,r,r_plus_exo)                exports from r to rr              (GW)
+HydrogenSupply(r)
 HydrogenDemand(r)
 ;
 
@@ -747,11 +775,11 @@ O
 ;
 
 * Energy balance
-E1(t,r)..                load_mod(t,r) =E= sum((tec_supply,allvin),SUPPLY(t,tec_supply,allvin,r))
+E1(t,r)..                load(t,r)     =E= sum((tec_supply,allvin),SUPPLY(t,tec_supply,allvin,r))
                                          - sum((tec_demand,allvin),DEMAND(t,tec_demand,allvin,r))
-                                         - sum(rr,FLOW(t,r,rr))
+                                         - sum(r_plus_exo,FLOW(t,r,r_plus_exo))
                                          - CURTAIL(t,r);
-                                                        
+
 * Hydrogen balance (H2 supply > H2 demand)
 E2(r)..                  h2_demand_exo(r) =L= H2_IMPORTS(r)
                                             + sum((tec_h2d,allvin,t),
@@ -775,14 +803,14 @@ C(alltec, allvin,r)..   CAPA(alltec,allvin,r)       =E=   sum(                  
 * Capacity adequacy: VRE & thermal & demand-side technologies
 * @RS: Given the similarity of C1 and C4, tec_exo may even be included in tec_vre?
 C1(t,tec_vre,allvin,r).. SUPPLY(t,tec_vre,allvin,r)   =E= profile(t,tec_vre,r)*CAPA(tec_vre,allvin,r);
-                                                        
+
 C2(t,tec_thm,allvin,r).. SUPPLY(t,tec_thm,allvin,r)   =L= avail(t,tec_thm,r) * (
                                                                 CAPA(tec_thm,allvin,r)
                                                                 - sum(tec_chp(tec_thm), CAPACHP(tec_chp,allvin,r)*(1 - CHP_profile(t,tec_chp,"max",r)))
                                                             );
-                                                        
+
 C3(t,tec_con,allvin,r).. DEMAND(t,tec_con,allvin,r)   =L= avail(t,tec_con,r) * CAPA(tec_con,allvin,r);
-                                                        
+
 C4(t,tec_exo,allvin,r).. SUPPLY(t,tec_exo,allvin,r)   =E= profile(t,tec_exo,r) * CAPA(tec_exo,allvin,r);
 
 
@@ -793,7 +821,7 @@ K2(r)..                  chp_tot(r)                 =L= sum((tec_chp,allvin),CAP
 K3(tec_chp,allvin,r)..   CAPACHP(tec_chp,allvin,r)  =E= chp0(tec_chp,allvin,r)
                                                         + sum(new(allvin), INVECHP(tec_chp,new,r))
                                                         - sum(vin(allvin), DECOCHP(tec_chp,vin,r));                                    // CHP capacity by technology equals existing + investment - decommissioning
-                                                        
+
 K4(tec_chp,vin,r)..   DECOCHP(tec_chp,vin,r)        =L= sum(tec_inv(tec_chp), DECO(tec_inv,vin,r));                                    // all CHP dis-investment must be part of total dis-investment of that technology
 
 K5(tec_chp,allvin,r)..   CAPACHP(tec_chp,allvin,r)  =L= CAPA(tec_chp,allvin,r);
@@ -808,8 +836,8 @@ A2(t,r)..                ASC(r)                     =L= sum((tec_thm,allvin), SU
                                                             + DEMAND(t,"PHS",allvin,r)
                                                             + SUPPLY(t,"hydr",allvin,r))
                                                         + sum(new, INVE("batr",new,r));
-                                       
-* Ramping 
+
+* Ramping
 Ra(t,tec_thm,allvin,r)..     GENE_increase(t,tec_thm,allvin,r) - GENE_decrease(t,tec_thm,allvin,r) =E= (SUPPLY(t,tec_thm,allvin,r)-SUPPLY(t-1,tec_thm,allvin,r))*1$(ord(t) > 1);
 
 * Ru: ramp up
@@ -852,29 +880,29 @@ O..                COST              =E= // Annualized investment costs
                                          + sum((tec_inv,new,r),           INVE(tec_inv,new,r)                     * cost_inv(tec_inv))
                                          + sum((tec_chp,new,r),           INVECHP(tec_chp,new,r)                  * sum(tec_inv(tec_chp), cost_chp(tec_inv)))
                                          + sum((tec_sto,new,r),           INVESTO(tec_sto,new,r)                  * cost_energy(tec_sto))
-                                         
+
                                          // Yearly fixed costs
                                          + sum((alltec,allvin,r),         CAPA(alltec,allvin,r)                   * cost_qfix(alltec))
-                                         
+
                                          // Variable costs
                                          + sum((t,tec_supply,allvin,r),   SUPPLY(t,tec_supply,allvin,r)           * cost_var(t,tec_supply,allvin,r))
                                          + sum((t,tec_demand,allvin,r),   DEMAND(t,tec_demand,allvin,r)           * cost_var(t,tec_demand,allvin,r))
-                                         
+
                                          // If H2B, hydrogen import costs
                                          + sum(r,                         H2_IMPORTS(r)                           * h2_import_price)$(%H2B% = 1)
-                                         
+
                                          // If RAMPING, ramping costs
                                          + sum((t,tec_thm,allvin,r),      GENE_increase(t,tec_thm,allvin,r)/th    * cost_ramping(tec_thm,r))$(%RAMPING% = 1)
-                                         
+
                                          // Network expansion costs
                                          + sum((r,rr),                    NTCINV(r,rr)*km(r,rr)/2                 * cost_ntc)
-                                         
+
                                          // Carbon absorbtion costs
                                          + sum((t,r),                     CO2_CAPTURE(t,r)                        * (1000 -  co2(r)) / mn)
-                                         
+
                                          // Curtailment costs (opportunity costs)
                                          + sum((t,r),                     CURTAIL(t,r)                            * cost_curtail);
-                                         
+
 
 MODEL EMMA /
 E1
@@ -952,7 +980,7 @@ $ENDIF.exclude_CCS_techs
 $IFTHENE.force_shortterm %SHORTTERM%=='1'
     INVE.FX(tec_inv,new,r)        = 0;
     INVECHP.FX(tec_chp,new,r)     = 0;
-    
+
     DECO.FX(tec_inv,vin,r)        = 0;
     DECOCHP.FX(tec_chp,vin,r)     = 0;
 
@@ -973,8 +1001,13 @@ $ELSE.allow_LTE
     NTCINV.FX(r,rr)                  = 0;
 $ENDIF.allow_LTE
 
-* INVESTO.FX("batr",new,r) = 5;
-* INVE.FX("batr",new,r) = 2.5;
+* exogenous exports
+$IFTHEN.exogenous_exports %EXOEXPORT%=='1'
+    FLOW.FX(t,r,r_exo)                  = exo_export(t,r);
+$ELSE.exogenous_exports
+    FLOW.FX(t,r,r_exo)                  = 0;
+$ENDIF.exogenous_exports
+
 
 // INVE.FX("PtHydrogen", allvin, r) = 0;
 
@@ -1008,12 +1041,12 @@ EMMA.reslim=50000;                // limits solving time to 14h
 
 EMMA.threads=%THREADS%;
 
-display cost_fuel, cost_qfix, cost_inv, cost_var, eff, avail, load, invemin, invemax, profile, capa0, chp0, ntc0, i_FLH, inflow, REshare, co2, export, CHP_profile, discountrate, cost_energy, km;
+display cost_fuel, cost_qfix, cost_inv, cost_var, eff, avail, load, invemin, invemax, profile, capa0, chp0, ntc0, i_FLH, inflow, REshare, co2, CHP_profile, discountrate, cost_energy, km;
 
 SOLVE EMMA USING LP minimizing COST;
 
 
-display INVE.L, DECO.L, SUPPLY.L, DEMAND.L, INVESTO.L, CURTAIL.L, FLOW.L, chp_tot, E1.M, CAPA.L, CAPACHP.L, SLEVEL.L, NTCINV.L;
+display INVE.L, DECO.L, SUPPLY.L, DEMAND.L, INVESTO.L, CURTAIL.L, FLOW.L, chp_tot, E1.M, CAPA.L, CAPACHP.L, SLEVEL.L, NTCINV.L, cost_var;
 
 
 display inflow, RESERVOIR_V.L, reservoir, hydro_min;
@@ -1027,7 +1060,7 @@ h2_price_sell(r) The price at which hydrogen is sold   (EUR per MWh thermal)
 h2_price_buy(r)  The price at which hydrogen is bought (EUR per MWh thermal) // the delta between buy and sell should be the full storage and transportation cost
 ;
 
-$IFTHENE.hydrogen_balance %H2B%=='1' 
+$IFTHENE.hydrogen_balance %H2B%=='1'
     h2_price_buy(r) = sum(tec_h2g, cost_fuel(tec_h2g))/card(tec_h2g) - E2.M(r)*th;
     h2_price_sell(r) = -sum(tec_h2d, cost_fuel(tec_h2d))/card(tec_h2d) - E2.M(r)*th;
 $ELSE.hydrogen_balance
@@ -1035,7 +1068,7 @@ $ELSE.hydrogen_balance
     h2_price_sell(r) = -sum(tec_h2d, cost_fuel(tec_h2d))/card(tec_h2d);
 $ENDIF.hydrogen_balance
 
-display h2_price_buy, h2_price_sell;
+display h2_price_buy, h2_price_sell, cost_fuel;
 
 $IFTHENE.ancillary_services %ASC%=='1'
     asc_level(r) = ASC.L(r);
@@ -1055,6 +1088,3 @@ $IF %DUMPDATA% == '1'            $include output.gms
 
 * Put data into Excel
 $IF %DUMPDATA% == '1'            execute 'gams to_excel.gms --ROW=B'
-
-
-

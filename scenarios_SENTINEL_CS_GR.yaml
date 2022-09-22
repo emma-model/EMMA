@@ -1,0 +1,53 @@
+scenarios:
+  sGR_0:
+    name: 2016
+    active: False
+    clp:
+      --HORIZON: 2016
+      --SHORTTERM: 1
+      --CARBONCAP: 0
+      --SI: SENTINEL_GRC_RF
+  
+  sGR_1:
+    name: RF_2030
+    active: True
+    clp:
+      --HORIZON: 2030
+      --FUTUREVRE: 1
+      --SI: SENTINEL_GRC_RF
+
+  sGR_2:
+    name: RF_2050
+    active: True
+    clp:
+      --HORIZON: 2050
+      --FUTUREVRE: 1
+      --SI: SENTINEL_GRC_RF
+
+  sGR_3:
+    name: RE_2050
+    active: True
+    clp:
+      --HORIZON: 2050
+      --FUTUREVRE: 1
+      --SI: SENTINEL_GRC_RE
+
+  sGR_4:
+    name: P2X_2050
+    active: True
+    clp:
+      --HORIZON: 2050
+      --FUTUREVRE: 1
+      --SI: SENTINEL_GRC_PX
+
+# default
+default_clp:
+  --HOURS: 8760
+  --AVAIL: future
+  --REGIONS: sGR
+  --CHP: 1
+  --CCS: 1
+  --EXOEXPORT: 1
+  --CARBONCAP: 1
+  --RAMPING: 0
+  --WeatherYEAR: 2016

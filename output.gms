@@ -21,6 +21,7 @@ o_asc(r)                                        ASC must run                    
 o_stoinv(tec_sto,*,new,r)                           new storage capacity            (GW and GWh)
 o_ntcinv(r,rr)                                  new NTC capacity                (GW)
 o_cost                                          total system cost               (MEUR)
+o_ntc_capa(r,rr)                                total ntc capacity              (GW)
 
 * Dispatch (and other hourly variables)
 o_load(t,r)                                   power demand
@@ -44,7 +45,7 @@ o_spill(t,r)                                    reservoir spillage              
 o_slevel(t,tec_sto,allvin,r)                    storage level                   (GWh)
 o_charge(t,tec_sto,allvin,r)                           storage charging                (GWh per hour)
 o_discharge(t,tec_sto,allvin,r)                        storage discharging             (GWh per hour)
-o_flow(t,r,rr)                                  hourly net exports wo exogenous (GWh per hour)
+o_flow(t,r,r_plus_exo)                                  hourly net exports wo exogenous (GWh per hour)
 o_cur(t,r)                                      curtailment                     (GWh per hour)
 
 o_co2_capture(r)                                CO2 Capture per region          (Mt per year)
@@ -54,7 +55,7 @@ o_co2_cap(r)                                    CO2 Cap per region              
 o_prices(t,r)                                   spot price                      (EUR per MWh)
 o_co2price(r)                                   carbon price                    (EUR per ton)
 o_h2price_sell(r)                               hydrogen sell-price             (EUR per MWh thermal)
-o_h2price_buy(r)                               hydrogen sell-price             (EUR per MWh thermal)
+o_h2price_buy(r)                                hydrogen sell-price             (EUR per MWh thermal)
 
 
 * Model statistics output
@@ -84,10 +85,11 @@ o_stoinv(tec_sto,"power",new,r)                       = sum(tec_inv(tec_sto), IN
 o_stoinv(tec_sto,"energy",new,r)                      = INVESTO.L(tec_sto,new,r);
 o_ntcinv(r,rr)                                        = NTCINV.L(r,rr);
 o_cost                                                = COST.L;
+o_ntc_capa(r,rr)                                      = ntc0(r,rr) + NTCINV.L(r,rr);
                                                       
 * Dispatch (and other hourly variables)
 o_load(t,r)                                           = load(t,r);
-o_import(t,r)                                         = - export(t,r) - sum(rr,FLOW.L(t,r,rr));              
+o_import(t,r)                                         = -sum(r_plus_exo,FLOW.L(t,r,r_plus_exo));              
 
 
 
@@ -113,7 +115,7 @@ o_slevel(t,tec_sto,allvin,r)                          = SLEVEL.L(t,tec_sto,allvi
 * Legacy: potentially to be deleted
 o_charge(t,tec_sto,allvin,r)                          = sum(tec_demand(tec_sto), DEMAND.L(t,tec_demand,allvin,r));
 o_discharge(t,tec_sto,allvin,r)                       = sum(tec_supply(tec_sto), SUPPLY.L(t,tec_supply,allvin,r));
-o_flow(t,r,rr)                                        = FLOW.L(t,r,rr);
+o_flow(t,r,r_plus_exo)                                        = FLOW.L(t,r,r_plus_exo);
 o_cur(t,r)                                            = CURTAIL.L(t,r);
 
 o_co2_capture(r)                                      = sum(t, CO2_CAPTURE.L(t,r))* sc / mn;
@@ -155,6 +157,7 @@ o_asc
 o_stoinv
 o_ntcinv
 o_cost
+o_ntc_capa
                                                     
 * Dispatch (and other hourly variables)                   
 o_load
@@ -204,8 +207,14 @@ o_h2_demand_exo
 profile
 avail
 efficiency
+eff
 i_cost
 alltec
 r
 tec_h2
+tec_h2g
+cost_fuel
+co2_int
+cost_var
+discountrate
 ;

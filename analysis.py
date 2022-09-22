@@ -3,73 +3,116 @@ import re
 import pandas as pd
 import sqlite3
 import contextlib
-import matplotlib.pyplot as plt
 import numpy as np
+import functools
 
 from call import folder, read_scenarios
-from collections import OrderedDict
 
-# Standard colors
-colors = OrderedDict([
-    ('nucl'    ,     (254/255, 213/255,   1/255)),
-    ('lign'    ,     (132/255,  60/255,  12/255)),
-    ('coal'    ,     (  0/255,   0/255,   0/255)),
-    ('CCGT'    ,     (160/255, 160/255, 160/255)),
-    ('OCGT'    ,     (190/255, 190/255, 190/255)),
+# dictionary which defines the horizons for scenarios.
+scen_hor_map = {
+    "2030_EU_CT": "2030",
+    "2050_EU_CT": "2050",
+    "2030_EU_CN": "2030",
+    "2050_EU_CN": "2050",
+    "2040_EU_EN": "2040",
+    "RF_2030": "2030",
+    "RF_2050": "2050",
+    "RE_2050": "2050",
+    "P2X_2050": "2050",
+}
 
-    ('lign_CCS',     (228/255, 179/255,  99/255)),
-    ('coal_CCS',     ( 90/255,  90/255,  90/255)),
-    ('CCGT_CCS',     (190/255, 160/255, 160/255)),
 
-    ('CCGT_H2',      ( 70/255, 255/255, 255/255)),
-    ('OCGT_H2',      (140/255, 255/255, 255/255)),
+def add_zeros(df: pd.DataFrame, mI: pd.MultiIndex):
+    """
+    This function complements the index of a DataFrame by a MultiIndex an adds zeros to the added rows.
 
-    ('gas'     ,     (160/255, 160/255, 160/255)),
+    :param df: pd.DataFrame which index is complemented
+    :param mI: pd.MultiIndex which complements the DataFrame
+    :return: pd.DataFrame which has a complemented index
+    """
+    df_zeros = pd.DataFrame(0, index=mI, columns=df.columns)
+    df = pd.merge(df_zeros, df, how="outer", on=mI.names).fillna(0)
 
-    ('hydr'    ,     (121/255, 168/255, 202/255)),
-    ('ror'     ,     (154/255, 187/255, 202/255)),
-    ('bio'     ,     (112/255, 173/255,  71/255)),
+    columns_x = [sc + "_x" for sc in df_zeros.columns]
+    df1 = df[columns_x]
+    df1.columns = df_zeros.columns
 
-    ('wion',         ( 31/255, 130/255, 192/255)),
-    ('wiof',         (  0/255,  96/255, 153/255)),
-    ('solar',        (255/255, 249/255, 100/255)),
+    columns_y = [sc + "_y" for sc in df_zeros.columns]
+    df2 = df[columns_y]
+    df2.columns = df_zeros.columns
 
-    ('PHS'     ,     (  0/255,  57/255, 107/255)),
-    ('batr'    ,     (200/255,   0/255,   0/255)),
-    ('Heat'    ,     (255/255,   0/255,   0/255)),
-    ('shed'    ,     (230/255, 230/255, 230/255)),
+    return df1.add(df2)
 
-    ('PtHydrogen',   (153/255, 255/255, 153/255)),
 
-    ('import',       (238/255, 162/255, 173/255)),
-    ('cur',          (238/255,  44/255,  44/255))
-])
+def change_tec_lvl_name_to_alltec(names: list):
+    """
+    This function changes name of technology level (for example tec_supply) to "alltec".
 
-colors_r = OrderedDict([
-    ('GER',     '#1f77b4'),
-    ('SWE',     '#ff7f0e'),
-    ('FRA',     '#2ca02c'),
-    ('NLD',     '#d62728'),
-    ('GBR',     '#9467bd'),
-    ('BEL',     '#8c564b'),
-    ('DNK',     '#e377c2'),
-    ('NOR',     '#7f7f7f'),
-    ('CHE',     '#bcbd22'),
-    ('AUT',     '#17becf'),
-    ('POL',     '#aec7e8'),
-    ('CZE',     '#ffbb78'),
-    ('GRC',     '#98df8a')
-])
+    :param names: list of column names
+    :return: list of new column names
+    """
+    new_names = []
+    for i in range(len(names)):
+        tech_name = re.search(".*tec.*", names[i])
+        if tech_name != None:
+            new_names.append("alltec")
+        else:
+            new_names.append(names[i])
+    return new_names
+
+
+def add_dimension(df: pd.DataFrame, new_level: list, new_level_name: str):
+    """
+    This function adds a new level to the index.
+
+    :param df: pd.DataFrame where new level is added
+    :param new_level: list of new level entries
+    :param new_level_name: string of new level
+    :return: DataFrame which has a new dimension with the new_level as its values
+    """
+    final_df = None
+    for item in new_level:
+        temp = pd.concat([df], keys=[item], names=[new_level_name])
+        final_df = pd.concat([final_df, temp])
+    return final_df
+
+
+def extract_horizon_specific_cost(i_cost: pd.DataFrame, scen_hor_map: dict):
+    """
+    This function extracts the horizon specific cost out of the "i_cost" table for a single technology.
+
+    :param i_cost: groupby object split by "alltec" of the i_cost table
+    :param scen_hor_map: dictionary specifying the scenario specific horizons
+    :return: a pd.Series with scenario index and horizon specific costs
+    """
+    cost_vector = pd.Series(None, dtype="Float64", index=i_cost.columns)
+    for scenario in i_cost.columns:
+        horizon = scen_hor_map[scenario]
+        horizon_costs = i_cost[scenario].xs(horizon, level="i_cost")
+        cost_vector[scenario] = horizon_costs.values
+    return cost_vector
 
 
 # Load ,data from SQLites
 
-def get_table(scenarios, scenario_id, table_name, use_name=False):
-    path = os.path.join(folder['sql_files'], str(scenario_id) + '.db')
+
+def get_table(
+    scenarios: dict, scenario_id: str, table_name: str, use_name: bool = False
+):
+    """
+    This function loads the scenario specific SQL table and converts it into a pd.DataFrame
+
+    :param scenarios: dictionary with scenario specific information loaded from the yaml file
+    :param scenario_id: string with scenario_id for which the SQL table should be loaded. scenario_id has to match the id in the yaml file
+    :param table_name: string of table name of SQL table which should be converted
+    :param use_name: boolean value whether name of scenario appears as name of column in DataFrame
+    :return: DataFrame with the contents of the SQL table.
+    """
+    path = os.path.join(folder["sql_files"], str(scenario_id) + ".db")
 
     if not os.path.isfile(path):
         print("Warning: tables does not exists in scenario id:", scenario_id)
-        return None
+        return
 
     try:
         with contextlib.closing(sqlite3.connect(path)) as connection:
@@ -77,26 +120,42 @@ def get_table(scenarios, scenario_id, table_name, use_name=False):
             df = pd.read_sql_query(query, connection)
             df = df.convert_dtypes()
 
-            if 't' in df.columns:
-                df['t'] = df['t'].astype('int32')
+            if "t" in df.columns:
+                df["t"] = df["t"].astype("int32")
 
             idx = list(df.columns)
-            if len(idx)>1:
-                idx.remove('value')
+            if len(idx) > 1:
+                idx.remove("value")
                 df = df.set_index(idx)
-                df = df.rename(columns={"value": str(scenarios[scenario_id]['name']) if use_name else str(scenario_id)})
+                df = df.rename(
+                    columns={
+                        "value": str(scenarios[scenario_id]["name"])
+                        if use_name
+                        else str(scenario_id)
+                    }
+                )
 
-            df.columns.names = ['scenario']
+            df.columns.names = ["scenario"]
 
         return df
     except Exception as e:
         print(e)
-        print(f'Table {table_name} not cannot be queried for scenario {scenario_id}')
+        print(f"Table {table_name} not cannot be queried for scenario {scenario_id}")
         return None
 
 
-def merge_tables(scenarios, table_name, historical=False):
-    dataframes = [get_table(scenarios, scenario_id, table_name, use_name=True) for scenario_id in scenarios]
+def merge_tables(scenarios: dict, table_name: str, historical: bool = False):
+    """
+    This function concatinates the DataFrames of get_table() by the index.
+
+    :param scenarios: dictionary with scenario specific information loaded from the yaml file
+    :param table_name: string of table name of SQL table which should be converted
+    :return: DataFrame with the contents of the SQL table of name table_name with the scenario names as columns.
+    """
+    dataframes = [
+        get_table(scenarios, scenario_id, table_name, use_name=True)
+        for scenario_id in scenarios
+    ]
     df = pd.concat(dataframes, axis=1)
 
     # Needed because otherwise the index name disappears when merging on columns with an empty dataframe
@@ -107,669 +166,331 @@ def merge_tables(scenarios, table_name, historical=False):
     return df
 
 
-class Data_handler:
+class DataHandler:
     """Class to retrieve SQLite tables, perform additional calculations and store the result in memory"""
 
     def __init__(self, scenarios):
         self.scenarios = scenarios
-        self.data = {}
-        self.composite = {}
 
-    def get(self, table_name):
+    def __hash__(self):
+        return hash(str(self.scenarios))
+
+    @functools.lru_cache
+    def merge_stored_sets(self, name):
+        # can load unique subsets of technologies or regions
+        return np.unique(self.get(name).values)
+
+    @functools.cached_property
+    def active_scenarios(self):
+        # creates dictionary of scenarios which are marked as active in the yaml files
+        helper_dict = {
+            str(keys): self.scenarios[keys]
+            for keys in self.scenarios.keys()
+            if self.scenarios[keys]["active"]
+        }
+        return helper_dict
+
+    @functools.cached_property
+    def hours(self):
+        # creates dictionary with simulated hour per scenario
+        helper_dict = {
+            str(self.scenarios[keys]["name"]): self.scenarios[keys]["clp"]["--HOURS"]
+            for keys in self.scenarios.keys()
+            if self.scenarios[keys]["active"]
+        }
+        return pd.Series(helper_dict)
+
+    @functools.lru_cache
+    def get(self, table_name, active_only=True):
         """Merges all tables with a given name and returns a dataframe
 
         :param table_name: str (can be whatever table name is contained in the SQLite fiels)
         :return: dataframe with each column being a scenario
         """
-        if table_name not in self.data:
-            self.data[table_name] = merge_tables(self.scenarios, table_name)
-        return self.data[table_name].copy()
-
-    def get_composite(self, method):
-        """Performs calculations based on SQLite tables and returns the result in a df with one column per scenario
-
-        :param method: str, implemented methods are: 'market_value', 'full_load_hours', 'load_factor'.
-        :return: dataframe with each column being a scenario
-        """
-        if method not in self.composite:
-            if method == 'market_value':
-                #adding all vintage classes together
-                df_supply = self.get('o_supply').groupby(['r','tec_supply','t']).sum()
-                df_supply = df_supply.stack().unstack('t').T
-                df_price = self.get('o_prices').stack().unstack('t').T
-
-                #calculate market value
-                df_mv = df_supply.mul(df_price, fill_value = np.nan).sum().div(df_supply.sum()).unstack('scenario')
-
-                # Save market value
-                self.composite[method] = df_mv
-
-            elif method == 'full_load_hours':
-                print('Warning: this implmentation is not compatible with storages yet!')
-                gen_df = self.get('o_supply')
-                gen_df.index.names = change_tec_lvl_name_to_alltec(gen_df.index.names)
-                cap_df = self.get('o_capa')
-
-                # In not all hours of the year are simulated, generation needs to be scaled by sc
-                sc = 8760 / len(gen_df.index.get_level_values('t').unique())
-                cum_gen_df = gen_df.groupby(['alltec', 'allvin', 'r'], dropna=False).sum() * sc
-
-                # Calculate full load hours
-                flh_df = cum_gen_df.divide(cap_df)
-
-                # Save full_load_hours
-                self.composite[method] = flh_df
-
-            elif method == 'load_factor':
-                # Can be easily defined recursively (only 'full_load_hours' if then saves but no big deal)
-                return self.get_composite('full_load_hours') / 8760
-            else:
-                raise Exception('This method has not been implemented:', method)
-
-        return self.composite[method].copy()
+        scenarios = self.active_scenarios if active_only else self.scenarios
+        return merge_tables(scenarios, table_name)
 
 
-def add_zeros(df,mI):
-    df_zeros = pd.DataFrame(0, index = mI, columns = df.columns)
-    df = pd.merge(df_zeros,df, how="outer",on = mI.names).fillna(0)
-
-    columns_x = [sc + '_x' for sc in df_zeros.columns]
-    df1 = df[columns_x]
-    df1.columns = df_zeros.columns
-
-    columns_y = [sc + '_y' for sc in df_zeros.columns]
-    df2 = df[columns_y]
-    df2.columns = df_zeros.columns
-
-    return df1.add(df2)
+# data processing functions
 
 
-def change_tec_lvl_name_to_alltec(names):
-    '''
-    Function changes level name of technology level (for example tec_supply) to alltec
-    '''
-    new_names = []
-    for i in range(len(names)):
-        m = re.search('.*tec.*',names[i])
-        if m != None:
-            new_names.append('alltec')
-        else:
-            new_names.append(names[i])
-    return new_names
+@functools.lru_cache
+def market_value(dh: DataHandler):
+    """
+    This function calculates the market value of all simulated technologies.
+
+    :param dh: DataHandler of simulation pack
+    :return: pd.DataFrame with market values for every country and technology
+    """
+    scenario_order = [
+        str(dh.active_scenarios[keys]["name"]) for keys in dh.active_scenarios
+    ]
+
+    # adding all vintage classes together
+    df_supply = dh.get("o_supply").groupby(["r", "tec_supply", "t"]).sum()
+    df_supply = df_supply.stack().unstack("t").T
+    df_price = dh.get("o_prices").stack().unstack("t").T
+
+    # calculate market value
+    df_mv = (
+        df_supply.mul(df_price, fill_value=np.nan)
+        .sum()
+        .div(df_supply.sum())
+        .unstack("scenario")
+    )
+    df_mv = df_mv[scenario_order]
+
+    df_PtHydrogen = pd.concat(
+        [dh.get("o_h2price_sell")], keys=["PtHydrogen"], names=["tec_supply"]
+    )
+    df_PtHydrogen = df_PtHydrogen.reorder_levels(["r", "tec_supply"])
+    df_mv = pd.concat([df_mv, df_PtHydrogen])
+
+    return df_mv
 
 
-# Plots and evaluation
+@functools.lru_cache
+def full_load_hours(dh: DataHandler):
+    """
+    This function calculates full load hours for all simulated technologies for all regions.
 
-def plot_by_tec(df, alltec, ylabel, figsize=(8, 5)):
+    :param dh: DataHandler of simulation pack
+    :return: pd.DataFrame with full load hours for every country and technology
+    """
+    gen_df = dh.get("o_supply")
+    gen_df.index.names = change_tec_lvl_name_to_alltec(gen_df.index.names)
+    cap_df = dh.get("o_capa")
 
-    tec_name = ''
-    for scen in df.index.names:
-        m = re.search('.*tec.*',scen)
-        if m != None:
-            tec_name = m.string
-    if tec_name == '':
-        print('There is no technology level in your dataframe.')
-    df = add_zeros(df,pd.Index(alltec,name=tec_name))
+    # In not all hours of the year are simulated, generation needs to be scaled by sc
+    sc = 8760 / len(gen_df.index.get_level_values("t").unique())
+    cum_gen_df = gen_df.groupby(["alltec", "allvin", "r"], dropna=False).sum() * sc
 
-    fig = plt.figure(figsize=figsize)
+    # Calculate full load hours
+    flh_df = cum_gen_df.divide(cap_df)
 
-    ax = fig.add_subplot(111)
-    x = range(df.shape[1])
-    bottom = 0
-    bottom_negative = 0
-
-    # Defines the order of appearence
-    labels = colors.keys()
-
-    # Removes techs that are not in the data (otherwise loop breaks)
-    labels = [l for l in labels if l in list(df.index.values)]
-
-    assert set(df.index.values).issubset(list(labels)), "You haven't defined a color for these technologies:"\
-                                                        + str(set(df.index.values)-set(labels))
-    handles = []
-    for i in labels:
-
-        tech = df.loc[i]
-        # Positive
-        handle = plt.bar(x, tech.clip(lower=0), label=i, bottom=bottom, color=colors[i])
-        bottom += tech.clip(lower=0)
-
-        # Negative
-        handle = plt.bar(x, tech.clip(upper=0), label=i, bottom=bottom_negative, color=colors[i])
-        bottom_negative += tech.clip(upper=0)
-
-        handles.append(handle[0])
-
-    # X axis
-    ax.set_xticks(x)
-    ax.set_xticklabels(df.columns)
-
-    # Y axis
-    ax.set_ylabel(ylabel)
-    y_bottom = bottom_negative.min()+0.1*bottom_negative.min()
-    y_top = bottom.max()+0.1*bottom.max()
-    ax.set_ylim(y_bottom,y_top)
-
-    # Grid
-    plt.grid(axis='y', zorder=0, color='grey', linewidth=.5)
-
-    plt.legend(labels=labels[::-1], handles=handles[::-1], loc='center', bbox_to_anchor=(1.1, 0.5))
-
-    return ax
+    return flh_df
 
 
-def plot_by_tec_and_hour(df, scenario, hour_range, focus_region, figsize=(8, 5), bar=True,load=None ,prices=None):
-    '''
-    :params df: DataFrame o_supply or different generation data set with levels time, tec and region
-            scenario: string, scenario name
-            hour_range: tuple with first entry as range start and second entry as range end
-            focus_region: string, focus_region name
+@functools.lru_cache
+def load_factor(dh: DataHandler):
+    """
+    This function calculates load factors for all simulated technologies for all regions.
 
-    '''
-    assert focus_region in df.index.get_level_values('r'), "this region has not been simulated: " + focus_region
-    assert scenario in df.columns, "this scenario has not been simulated: " + str(scenario)
-    assert len(hour_range) == 2, "hour_range must me a list of two elements"
+    :param dh: DataHandler of simulation pack
+    :return: pd.DataFrame with load factors for every country and technology
+    """
 
-    # creates Dataframe of scenario and focus region with points of time as columns and different techs as rows.
-    df = df.groupby(['t', 'tec_supply', 'r']).sum().reset_index() \
-        .pivot(index=('tec_supply', 'r'), columns='t') \
-        .xs(focus_region, level='r').loc[:, scenario].loc[:, hour_range[0]:hour_range[1]]
-
-    # This is to remove techs that have no capacity
-    df = df.fillna(0)
-    df = df[(df.T != 0).any()]
-
-    fig = plt.figure(figsize=figsize)
-    ax = fig.add_subplot(111)
-    x = range(df.shape[1])
-    b_pos = 0
-    b_neg = 0
-
-    # Defines the order of appearence
-    labels = colors.keys()
-
-    assert set(df.index.values).issubset(list(labels)), "You haven't defined a color for these technologies:"\
-                                                        + str(set(df.index.values)-set(labels))
-
-    # Removes techs that are not in the data (otherwise loop breaks)
-    labels = [l for l in labels if l in list(df.index.values)]
-
-    handles = []
-    for i in labels:
-        pos = df.loc[i].clip(lower=0)
-        neg = df.loc[i].clip(upper=0)
-        if bar:
-            handle = plt.bar(x, pos, label=i, bottom=b_pos, color=colors[i])[0]
-            handle = plt.bar(x, neg, label=i, bottom=b_neg, color=colors[i])[0]
-        else:
-            handle = plt.fill_between(x, b_pos, b_pos+pos, label=i, color=colors[i], linewidth=0)
-            handle = plt.fill_between(x, b_neg, b_neg+neg, label=i, color=colors[i], linewidth=0)
-        b_pos += pos
-        b_neg += neg
-        handles.append(handle)
-
-    if load is not None:
-        assert isinstance(load, pd.Series), 'load must be an pandas Series'
-        print(load,df)
-        load.plot(color='black',linestyle='--')
-
-    if prices is not None:
-        assert isinstance(prices, pd.Series), 'Prices must be an pandas Series'
-        ax2 = ax.twinx()
-        ax2.set_ylabel("Power price")
-        #print(prices.ravel(order="C"))
-        ax2.plot(x, prices.values.to_numpy())
-
-        ## Not implemented yet: Ensure that axis align at 0 intersect
-        # miny, maxy = ax.get_ylim()
-        # miny2, maxy2 = ax2.get_ylim()
-        # '''add logic to define and replace -10, 10, -6 ,6'''
-        # ax.set_ylim(-10,10)
-        # ax2.set_ylim(-6,6)
-
-    # X axis
-    ax.set_xticks(x)
-    ax.set_xticklabels(df.columns)
-
-    # Y axis
-    ylabel = 'Generation by technology'
-    ax.set_ylabel(ylabel)
+    # Can be easily defined recursively (only 'full_load_hours' if then saves but no big deal)
+    return full_load_hours(dh) / 8760
 
 
-    # Grid
-    plt.grid(axis='y', zorder=0, color='grey', linewidth=.5)
+@functools.lru_cache
+def electricity_balance(dh: DataHandler):
+    """
+    This function creates a DataFrame of the electricity balance of all regions.
 
-    plt.legend(labels=labels[::-1], handles=handles[::-1], loc='center', bbox_to_anchor=(1.1, 0.5))
-    plt.title(str(focus_region) + ' in scenario ' + scenario + ': ' + 'from hour ' + str(hour_range[0]) + ' to hour ' + str(hour_range[1]))
+    :param dh: DataHandler of simulation pack
+    :return: pd.DataFrame of the electrical flows of demand and supply.
+    """
+    # creates DataFrame of all electricity flows in TWh with index = ['alltec','r']
+    supply = dh.get("o_supply").groupby(["tec_supply", "r"]).sum()
+    supply.index.names = ["alltec", "r"]
+    supply = pd.concat([supply], keys=["supply"], names=["type"])
+    demand = dh.get("o_demand").groupby(["tec_demand", "r"]).sum() * -1
+    demand.index.names = ["alltec", "r"]
+    demand = pd.concat([demand], keys=["demand"], names=["type"])
+    imp = pd.concat(
+        [
+            pd.concat(
+                [dh.get("o_import").groupby("r").sum()],
+                keys=["import"],
+                names=["alltec"],
+            )
+        ],
+        keys=["demand"],
+        names=["type"],
+    )
+    cur = pd.concat(
+        [
+            pd.concat(
+                [dh.get("o_cur").groupby("r").sum().mul(-1)],
+                keys=["cur"],
+                names=["alltec"],
+            )
+        ],
+        keys=["demand"],
+        names=["type"],
+    )
 
-    return df
+    elec_flow = pd.concat([supply, demand, imp, cur])
+    elec_flow = elec_flow.div(1000)
+
+    mI = pd.MultiIndex.from_product(
+        [
+            dh.merge_stored_sets("alltec"),
+            dh.merge_stored_sets("r"),
+            ["supply", "demand"],
+        ],
+        names=["alltec", "r", "type"],
+    )
+    elec_flow = add_zeros(elec_flow, mI)
+
+    return elec_flow
 
 
-def pdc_pivot(prices, scenario=None, region=None):
-    df = prices
+@functools.lru_cache
+def hydrogen_balance(dh: DataHandler):
+    """
+    This function creates a DataFrame of the hydrogen balance of all regions.
 
-    df = df.reset_index().pivot(index='t', columns='r')
+    :param dh: DataHandler of simulation pack
+    :return: pd.DataFrame of the hydrogen flows of demand and supply.
+    """
+    supply = (
+        dh.get("o_h2_gene").fillna(0).groupby(["tec_h2d", "r"]).sum().astype("Float64")
+    )
+    supply.index.names = ["alltec", "r"]
+
+    demand = (
+        dh.get("o_h2_usage")
+        .fillna(0)
+        .groupby(["tec_h2g", "r"])
+        .sum()
+        .mul(-1)
+        .astype("Float64")
+    )
+    demand.index.names = ["alltec", "r"]
+
+    imp = dh.get("o_h2_imports")
+    imp = add_zeros(imp, pd.Index(dh.merge_stored_sets("r"), name="r"))
+    imp = pd.concat([imp], keys=["import"], names=["alltec"]).astype("Float64")
+
+    h2_bal = pd.concat([supply, demand, imp]).div(1000)
+
+    mI = pd.MultiIndex.from_product(
+        [dh.merge_stored_sets("tec_h2"), dh.merge_stored_sets("r")],
+        names=["alltec", "r"],
+    )
+    h2_bal = add_zeros(h2_bal, mI)
+
+    return h2_bal
+
+
+@functools.lru_cache
+def pdc_pivot(dh: DataHandler):
+    """
+    This function pivots the price DataFrame of all regions.
+
+    :param dh: DataHandler of simulation pack
+    :return: pivoted pd.DataFrame of the electricity shadow prices.
+    """
+    df = dh.get("o_prices")
+
+    df = df.reset_index().pivot(index="t", columns="r")
 
     for col in df.columns:
         df[col] = sorted(df[col])
 
     df = df.reset_index(drop=True)
-
-    if scenario is None:
-        scenario = slice(None)
-    if region is None:
-        region = slice(None)
-
-    df = df.loc[:, (scenario, region)]
-
     return df
 
 
-def plot_energy_balance(dh, focus_region=None, ylabel="TWh", figsize=(8, 5),show_data =False):
+@functools.lru_cache
+def total_investment_costs(dh: DataHandler, scen_hor_map: dict = scen_hor_map):
     """
-    Function to plot energy balance plots of a focus_region
-    :param dh: data_handler with scenarios
-    :param focus_region: str
-    :return ax: energy balance plot
+    This function calculates the total investment costs of all regions and technologies.
+
+    :param dh: DataHandler of simulation pack
+    :param scen_hor_map: dictionary specifying the scenario specific horizons
+    :return: pd.DataFrame of the total investment costs.
     """
-    regions = get_table(dh.scenarios,next(iter(dh.scenarios)),'r',use_name = True)['rall'].values
-    alltec = get_table(dh.scenarios,next(iter(dh.scenarios)),'alltec',use_name = True)['alltec'].values
-    # Data handling
-    if focus_region == None:
-        df = pd.concat([dh.get('o_supply').groupby(['tec_supply']).sum().div(1000),
-                        dh.get('o_demand').groupby(['tec_demand']).sum().div(1000)*-1,
-                        pd.DataFrame([dh.get('o_import').sum().div(1000)],index=['import']),
-                        pd.DataFrame([dh.get('o_cur').sum().div(1000)*-1],index=['cur'])])
-        df.index.names = ["alltec"]
-        df = add_zeros(df,pd.Index(alltec,name="alltec"))
+    # discountrate series with index: scenarios
+    discount_rate = dh.get("scalars").loc["discountrate", :]
+    sc = 8760 / dh.hours
 
-        load = -dh.get('o_import').sum().div(1000)\
-                -dh.get('o_flow').sum().div(1000)\
-                +dh.get('o_load').sum().div(1000)
+    # investment costs dataframe with columns: scenarios and index: alltec
+    inv = dh.get("i_cost").xs("invest", level="par_cost")
+    assert all(
+        k in scen_hor_map for k in inv.columns
+    ), "You have not defined a horizon level for a scenario."
+    tec_inv = list(
+        dh.get("i_cost")
+        .xs("invest", level="par_cost")
+        .index.get_level_values("alltec")
+        .unique()
+    )
+    inv = inv.groupby(["alltec"]).apply(extract_horizon_specific_cost, scen_hor_map)
 
-        if show_data:
-            print('The electricitiy balance data: \n',df)
-            print('_____________________________________________________________________\n')
-            print('The exogenous load: \n',pd.DataFrame([load],index = ['load']))
+    # lifetime dataframe with columns: scenarios and index: alltec
 
-        l_ind = load.index
-        load = load.to_numpy()
+    lt = dh.get("i_cost").xs("lifetime", level="par_cost")
+    lt.index = lt.index.droplevel("i_cost")
+    lt = lt.loc[tec_inv, :]
 
-    else:
-        supply = dh.get('o_supply').groupby(['tec_supply', 'r']).sum()
-        supply.index.names = ['alltec','r']
+    # flex_premium dataframe with columns: scenarios and index: alltec
+    fp = dh.get("i_cost").xs("flex_premium", level="par_cost")
+    fp.index = fp.index.droplevel("i_cost")
+    fp = fp.loc[tec_inv, :]
 
-        demand = dh.get('o_demand').groupby(['tec_demand', 'r']).sum()*-1
-        demand.index.names = ['alltec','r']
+    inv = (
+        inv
+        * ((1 + discount_rate) ** lt * discount_rate)
+        / ((1 + discount_rate) ** lt - 1)
+    )
 
-        imp = dh.get('o_import').groupby('r').sum().reset_index()
-        imp['alltec'] = pd.Series('import',index = imp.index)
-        imp = imp.set_index(['alltec','r'])
+    # investment costs DataFrame with columns: scenarios and index: [alltec, regions]
+    cost = inv / sc * fp
+    cost = add_dimension(cost, dh.merge_stored_sets("r"), "r")
+    cost = cost.reorder_levels(["alltec", "r"])
 
-        curt = dh.get('o_cur').groupby('r').sum()*-1
-        curt['alltec'] = pd.Series('cur',index = curt.index)
-        curt = curt.reset_index().set_index(['alltec','r'])
+    inv_capa = dh.get("o_inve")
+    inv_capa.index.names = change_tec_lvl_name_to_alltec(inv_capa.index.names)
+    inv_capa.index = inv_capa.index.droplevel(["new"])
+    inv_capa = inv_capa.astype("Float64")
 
-        df = pd.concat([supply,demand,imp,curt])
-        df = add_zeros(df,pd.MultiIndex.from_product([alltec,regions], names=["alltec", "r"]))
-        df = df.xs(focus_region, level = 'r').div(1000)
-
-        load = add_zeros(dh.get('o_load').groupby('r').sum(),pd.Index(regions,name="r")).loc[focus_region,:].div(1000)
-        load = load - add_zeros(dh.get('o_import').groupby('r').sum(),pd.Index(regions,name="r")).loc[focus_region,:].div(1000) if not dh.get('o_import').groupby('r').sum().empty else load
-        load = load - add_zeros(dh.get('o_flow').groupby('r').sum(),pd.Index(regions,name="r")).loc[focus_region,:].div(1000) if not dh.get('o_flow').groupby('r').sum().empty else load
-
-        if show_data:
-            print('The electricitiy balance data: \n',df)
-            print('_____________________________________________________________________\n')
-            print('The exogenous load: \n',pd.DataFrame([load],index = ['load']))
-
-        l_ind = load.index
-        load = load.to_numpy()
-
-    fig = plt.figure(figsize=figsize)
-
-    ax = fig.add_subplot(111)
-    x = range(df.shape[1])
-    bottom = 0
-    bottom_negative = 0
-
-    # Defines the order of appearence
-    labels = colors.keys()
-
-    # Removes techs that are not in the data (otherwise loop breaks)
-    labels = [l for l in labels if l in list(df.index.values)]
-
-    assert set(df.index.values).issubset(list(labels)), "You haven't defined a color for these technologies:"\
-                                                        + str(set(df.index.values)-set(labels))
-    handles = []
-    for i in labels:
-
-        tech = df.loc[i]
-
-        # this if-else clause is integrated since there are technologies which can both use and generate electricity and are therefore twice in a bar.
-        if isinstance(tech, pd.DataFrame):
-            for j in range(len(tech.index)):
-                # Positive
-                handle = plt.bar(x, tech.iloc[j, :].clip(lower=0), label=i, bottom=bottom, color=colors[i])
-                bottom += tech.iloc[j, :].clip(lower=0)
-                # Negative
-                handle = plt.bar(x, tech.iloc[j, :].clip(upper=0), label=i, bottom=bottom_negative, color=colors[i])
-                bottom_negative += tech.iloc[j, :].clip(upper=0)
-
-            handles.append(handle[0])
-
-        else:
-            # Positive
-            handle = plt.bar(x, tech.clip(lower=0), label=i, bottom=bottom, color=colors[i])
-            bottom += tech.clip(lower=0)
-            # Negative
-            handle = plt.bar(x, tech.clip(upper=0), label=i, bottom=bottom_negative, color=colors[i])
-            bottom_negative += tech.clip(upper=0)
-
-            handles.append(handle[0])
-
-    handle = plt.plot(l_ind,load,label="demand",color="black",linestyle='dashed')
-    handles.append(handle[0])
-    labels.append('demand')
-    # X axis
-    ax.set_xticks(x)
-    ax.set_xticklabels(df.columns)
-
-    # Y axis
-    ax.set_ylabel(ylabel)
-    y_bottom = bottom_negative.min()+0.1*bottom_negative.min()
-    y_top = bottom.max()+0.1*bottom.max()
-    ax.set_ylim(y_bottom,y_top)
-
-    # title
-    ax.set_title('Electricity Balance of {}'.format('all regions' if focus_region == None else focus_region))
-
-    # Grid
-    plt.grid(axis='y', zorder=0, color='grey', linewidth=.5)
-
-    # Balance line at 0.
-    plt.axhline(y=0,linewidth=1, color='k')
-
-    plt.legend(labels=labels[::-1], handles=handles[::-1], loc='center', bbox_to_anchor=(1.1, 0.5))
-
-    return ax
+    return inv_capa.mul(cost)
 
 
-def plot_hydrogen_balance(dh, focus_region=None, ylabel="TWht", figsize=(8, 5),show_data=False):
+# @functools.lru_cache
+def variable_costs(dh: DataHandler, scen_hor_map: dict = scen_hor_map):
     """
-    Function to plot hydrogen balance plots of a focus_region per scenario
-    :param dh: data_handler with scenarios
-    :param focus_region: str
-    :return ax: hydrogen balance plot
+    This function calculates variable costs of all technologies in all regions.
+
+    :param dh: DataHandler of simulation pack
+    :param scen_hor_map: dictionary specifying the scenario specific horizons
+    :return: pd.DataFrame of the variable costs.
     """
+    print("PtHydrogen not implemented")
 
-    # lists with all H2 techs and regions which were used in this scenario
-    regions = get_table(dh.scenarios,next(iter(dh.scenarios)),'r',use_name = True)['rall'].values
-    tec_h2 = get_table(dh.scenarios,next(iter(dh.scenarios)),'tec_h2',use_name = True)['alltec'].values
+    cost_var = dh.get("i_cost").xs("varcost", level="par_cost")
+    cost_var = cost_var.groupby(["alltec"]).apply(
+        extract_horizon_specific_cost, scen_hor_map
+    )
+    cost_var = add_dimension(cost_var, dh.merge_stored_sets("r"), "r")
+    cost_var = cost_var.reorder_levels(["alltec", "r"])
 
-    # Data handling
-    if focus_region == None:
-        df = pd.concat([dh.get('o_h2_gene').fillna(0).groupby(['tec_h2d']).sum().div(1000),
-                        dh.get('o_h2_usage').fillna(0).groupby(['tec_h2g']).sum().div(1000)*-1,
-                        pd.DataFrame([dh.get('o_h2_imports').sum().div(1000)],index=['import'])])
+    h2_price = dh.get("o_h2price_buy")
+    h2_price = add_dimension(h2_price, dh.merge_stored_sets("tec_h2g"), "alltec")
 
-        df.index.names = ["tec_h2"]
-        # adds zeros to all techs which were not using or generating H2 to let them show in the plots legend
-        df = add_zeros(df,pd.Index(tec_h2,name="tec_h2"))
+    elec_price = dh.get("o_prices")
 
-        # exogeneous H2 demand
-        load = dh.get('o_h2_demand_exo').sum().div(1000)
+    cost_fuel = dh.get("cost_fuel")
+    cost_fuel = add_dimension(cost_fuel, dh.merge_stored_sets("r"), "r")
+    cost_fuel = cost_fuel.reorder_levels(["alltec", "r"])
 
-        if show_data:
-            print('The hydrogen balance data: \n',df)
-            print('_____________________________________________________________________\n')
-            print('The exogenous load: \n',pd.DataFrame([load],index = ['load']))
+    cost_fuel.loc[h2_price.index, :] = h2_price
 
-        l_ind = load.index
-        load = load.to_numpy()
+    eff = dh.get("eff")
 
-    else:
-        supply = dh.get('o_h2_gene').fillna(0).groupby(['tec_h2d', 'r']).sum()
-        supply.index.names = ['tec_h2','r']
+    co2_int = dh.get("co2_int").div(1000)
 
-        demand = dh.get('o_h2_usage').fillna(0).groupby(['tec_h2g', 'r']).sum()*-1
-        demand.index.names = ['tec_h2','r']
+    co2_price = dh.get("o_co2price")
 
-        imp = dh.get('o_h2_imports')
-        imp = add_zeros(imp,pd.Index(regions,name='r'))
-        imp = imp.reset_index()
-        imp['tec_h2'] = pd.Series('import',index = imp.index)
-        imp = imp.set_index(['tec_h2','r'])
+    co2_costs = co2_int * co2_price
+    co2_costs.index.names = ["alltec", "r"]
 
-        df = pd.concat([supply,demand,imp])
-        df = add_zeros(df,pd.MultiIndex.from_product([tec_h2,regions], names=["tec_h2", "r"]))
-        df = df.xs(focus_region, level = 'r').div(1000)
+    var_cost = (
+        cost_fuel.add(co2_costs, fill_value=0).div(eff).add(cost_var, fill_value=0)
+    )
 
-        load = dh.get('o_h2_demand_exo')
-        if focus_region in load.index:
-            load = load.loc[focus_region,:].div(1000).fillna(0)
-        else:
-            load = pd.Series(0,df.columns)
-
-        if show_data:
-            print('The hydrogen balance data: \n',df)
-            print('_____________________________________________________________________\n')
-            print('The exogenous load: \n',pd.DataFrame([load],index = ['load']))
-
-        l_ind = load.index
-        load = load.to_numpy()
-
-    fig = plt.figure(figsize=figsize)
-
-    ax = fig.add_subplot(111)
-    x = range(df.shape[1])
-    bottom = 0
-    bottom_negative = 0
-
-    # Defines the order of appearence
-    labels = colors.keys()
-
-    # Removes techs that are not in the data (otherwise loop breaks)
-    labels = [l for l in labels if l in list(df.index.values)]
-
-    assert set(df.index.values).issubset(list(labels)), "You haven't defined a color for these technologies:"\
-                                                            + str(set(df.index.values)-set(labels))
-    handles = []
-    for i in labels:
-
-        tech = df.loc[i]
-
-        if isinstance(tech, pd.DataFrame):
-            for j in range(len(tech.index)):
-                # Positive
-                handle = plt.bar(x, tech.iloc[j,:].clip(lower=0), label=i, bottom=bottom, color=colors[i])
-                bottom += tech.iloc[j,:].clip(lower=0)
-                # Negative
-                handle = plt.bar(x, tech.iloc[j,:].clip(upper=0), label=i, bottom=bottom_negative, color=colors[i])
-                bottom_negative += tech.iloc[j,:].clip(upper=0)
-
-            handles.append(handle[0])
-
-        else:
-            # Positive
-            handle = plt.bar(x, tech.clip(lower=0), label=i, bottom=bottom, color=colors[i])
-            bottom += tech.clip(lower=0)
-            # Negative
-            handle = plt.bar(x, tech.clip(upper=0), label=i, bottom=bottom_negative, color=colors[i])
-            bottom_negative += tech.clip(upper=0)
-
-            handles.append(handle[0])
-
-    handle = plt.plot(l_ind,load,label="demand_exo",color="black",linestyle='dashed')
-    handles.append(handle[0])
-    labels.append('demand_exo')
-
-    # X axis
-    ax.set_xticks(x)
-    ax.set_xticklabels(df.columns)
-
-    # Y axis
-    ax.set_ylabel(ylabel)
-    y_bottom = bottom_negative.min()+0.1*bottom_negative.min()
-    y_top = bottom.max()+0.1*bottom.max()
-    ax.set_ylim(y_bottom,y_top)
-
-    # title
-    ax.set_title('Hydrogen Balance of {}'.format('all regions' if focus_region == None else focus_region))
-
-    # Grid
-    plt.grid(axis='y', zorder=0, color='grey', linewidth=.5)
-
-    # balance line at 0
-    plt.axhline(y=0,linewidth=1, color='k')
-
-    plt.legend(labels=labels[::-1], handles=handles[::-1], loc='center', bbox_to_anchor=(1.1, 0.5))
-
-    return ax
-
-
-def plot_co2_emissions(dh, figsize=(8, 5),show_cap = True,show_data=False):
-    """
-    Function to plot CO2 emmision of all modeled regions with the CO2 cap
-    :param dh: data_handler with scenarios
-    :return ax: CO2 emissions plot
-    """
-    # list of all possible regions
-    regions = get_table(dh.scenarios,next(iter(dh.scenarios)),'r',use_name = True)['rall'].values
-
-    # Data handling
-    df = pd.concat([dh.get('o_emissions').groupby(['r']).sum(),
-                    add_zeros(dh.get('o_co2_capture'),pd.Index(regions,name="r"))*-1])
-    co2_cap = dh.get('o_co2_cap').sum()
-
-    l=[]
-    for keys in dh.scenarios:
-        l.append(True) if dh.scenarios[keys]['clp']['--CARBONCAP']==1 else l.append(False)
-
-    if show_data:
-        print('The CO2 emissions data: \n',df)
-        print('_____________________________________________________________________\n')
-        print('The CO2 caps: \n',pd.DataFrame([co2_cap[l]],index = ['CO2 cap']))
-
-    fig = plt.figure(figsize=figsize)
-
-    ax = fig.add_subplot(111)
-    x = df.columns
-    bottom = 0
-    bottom_negative = 0
-
-    # Defines the order of appearence
-    labels = colors_r.keys()
-
-    # Removes techs that are not in the data (otherwise loop breaks)
-    labels = [l for l in labels if l in list(df.index.values)]
-
-    assert set(df.index.values).issubset(list(labels)), "You haven't defined a color for these technologies:"\
-                                                        + str(set(df.index.values)-set(labels))
-    handles = []
-    for i in labels:
-
-        tech = df.loc[i]
-
-        # this if-else clause is integrated because there are technologies which can both use and generate electricity and are therefore twice in a bar.
-        if isinstance(tech, pd.DataFrame):
-            for j in range(len(tech.index)):
-                # Positive
-                handle = plt.bar(x, tech.iloc[j, :].clip(lower=0), label=i, bottom=bottom, color = colors_r[i])
-                bottom += tech.iloc[j, :].clip(lower=0)
-                # Negative
-                handle = plt.bar(x, tech.iloc[j, :].clip(upper=0), label=i, bottom=bottom_negative, color = colors_r[i])
-                bottom_negative += tech.iloc[j, :].clip(upper=0)
-
-            handles.append(handle[0])
-
-        else:
-            # Positive
-            handle = plt.bar(x, tech.clip(lower=0), label=i, bottom=bottom, color = colors_r[i])
-            bottom += tech.clip(lower=0)
-            # Negative
-            handle = plt.bar(x, tech.clip(upper=0), label=i, bottom=bottom_negative, color = colors_r[i])
-            bottom_negative += tech.clip(upper=0)
-
-            handles.append(handle[0])
-
-    if show_cap:
-        handle = plt.bar(co2_cap[l].index,pd.Series(co2_cap[l].values.max()*0.02,index=co2_cap[l].index), label='cap', bottom=co2_cap[l], color = 'black')
-        handles.append(handle[0])
-        labels.append('cap')
-
-    # X axis
-    ax.set_xticks(x)
-    ax.set_xticklabels(df.columns)
-
-    # Y axis
-    ax.set_ylabel('CO2 Emissions (Mt)')
-    y_bottom = bottom_negative.min()+0.1*bottom_negative.min()
-    y_top = max(co2_cap.values.max() + 0.1* co2_cap.values.max(), bottom.max()+0.1*bottom.max())
-    ax.set_ylim(y_bottom,y_top)
-
-    # title
-    ax.set_title('CO2 Emissions')
-
-    # Grid
-    plt.grid(axis='y', zorder=0, color='grey', linewidth=.5)
-
-    # Balance line at 0.
-    plt.axhline(y=0,linewidth=1, color='k')
-
-    plt.legend(labels=labels[::-1], handles=handles[::-1], loc='center', bbox_to_anchor=(1.1, 0.5))
-
-    return ax
-
-
-def plot_mv(dh,tec_list,show_data=False):
-    '''
-    Function to plot the market value of tec_list of different regions over all scenarios with aggregated vintage classes.
-    :param dh: data_handler with scenarios
-    :param tec_list: list of strings with techs
-    '''
-    df = dh.get_composite('market_value')
-
-    if show_data:
-        print('The market value data: \n',df)
-
-    fig, axes = plt.subplots(1,len(tec_list),figsize=(10,5),sharex=True,sharey = True)
-    handles, labels = [],[]
-
-    for i in range(len(tec_list)):
-        # checks if there is any data for the technology
-        if df.index.isin([tec_list[i]],level='tec_supply').any():
-            # extracting market value data of wished technology.
-            df_helper = df.xs(tec_list[i],level='tec_supply').transpose()
-            colors = [colors_r[r] for r in df_helper.columns]
-
-            # if 'LTE' in df_helper.index:
-            #     df_helper.loc[df_helper.index != 'LTE',:].plot(ax= axes[i], color = colors, legend=False, marker = 'o', linestyle = '--', xticks= df_helper.index)
-            #     df_helper.loc[df_helper.index == 'LTE',:].plot(ax= axes[i], color = colors, legend=False, marker = 'o', linestyle = '--', xticks= df_helper.index)
-
-            df_helper.plot(ax= axes[i], color = colors, legend=False, marker = 'o', linestyle = '--',use_index=True)
-
-        axes[i].set_title(tec_list[i])
-        axes[i].set_ylabel('Market value (Euro/MWh)')
-        axes[i].set_xlabel('')
-        axes[i].tick_params('x',labelrotation=45,bottom=True,labelbottom = True)
-        axes[i].grid(axis='y', zorder=0, color='grey', linewidth=.5)
-
-        #handles for legend
-        handle, label = axes[i].get_legend_handles_labels()
-        handles = handles + handle
-        labels = labels + label
-
-    #fig.text(0.07, 0.5, 'Market value [Euro/GWh]', va='center', rotation='vertical')
-    #Main Title
-    fig.suptitle('Market value')
-
-    # workaround to remove duplicates from handles and labels
-    by_label = dict(zip(labels, handles))
-    # legend
-    fig.legend(by_label.values(), by_label.keys(), loc='center', bbox_to_anchor=(0.98, 0.5))
-
-
-if __name__ == '__main__':
-    scenarios = read_scenarios('scenarios_DEMO.yaml')
-    dh = Data_handler(scenarios)
+    return var_cost

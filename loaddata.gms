@@ -40,7 +40,6 @@ $onecho > data_ts.txt
 set=time                 rng=time!a2:k8761               rdim=9
 par=i_chp                rng=CHP!a6:p8767                rdim=1 cdim=2
 par=i_load               rng=load!a6:el8768              rdim=1 cdim=3
-par=i_export             rng=export!a6:g8767             rdim=1 cdim=2
 par=i_avail              rng=avail!a6:i8768              rdim=1 cdim=3
 par=i_solar              rng=solar!a7:ep8769             rdim=1 cdim=3
 par=i_solar_future       rng=solar_future!a6:ec8768      rdim=1 cdim=3
@@ -51,3 +50,16 @@ par=i_wiof_future        rng=wiof_future!a6:cv8768       rdim=1 cdim=3
 $offecho
 
 $CALL GDXXRW.exe        input\data_ts.xlsx     @data_ts.txt
+
+$onecho > exoexport.txt
+par=i_exo_export         rng=export!a6:r8768             rdim=1 cdim=3
+$offecho
+
+$CALL GDXXRW.exe        input\exoexport.xlsx     @exoexport.txt
+
+$onecho > exoload.txt
+par=i_exo_load           rng=load!a6:el8768             rdim=1 cdim=3
+par=i_exo_h2_demand      rng=hydrogen!a2:el5         rdim=0 cdim=3
+$offecho
+
+$CALL GDXXRW.exe        input\exoload.xlsx       @exoload.txt
