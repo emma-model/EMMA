@@ -1,215 +1,14 @@
-import os
-import re
 import pandas as pd
-import sqlite3
-import contextlib
 import numpy as np
 import functools
 
-from call import folder, read_scenarios
-
-# dictionary which defines the horizons for scenarios.
-scen_hor_map = {
-    "2030_EU_CT": "2030",
-    "2050_EU_CT": "2050",
-    "2030_EU_CN": "2030",
-    "2050_EU_CN": "2050",
-    "2040_EU_EN": "2040",
-    "RF_2030": "2030",
-    "RF_2050": "2050",
-    "RE_2050": "2050",
-    "P2X_2050": "2050",
-}
-
-
-def add_zeros(df: pd.DataFrame, mI: pd.MultiIndex):
-    """
-    This function complements the index of a DataFrame by a MultiIndex an adds zeros to the added rows.
-
-    :param df: pd.DataFrame which index is complemented
-    :param mI: pd.MultiIndex which complements the DataFrame
-    :return: pd.DataFrame which has a complemented index
-    """
-    df_zeros = pd.DataFrame(0, index=mI, columns=df.columns)
-    df = pd.merge(df_zeros, df, how="outer", on=mI.names).fillna(0)
-
-    columns_x = [sc + "_x" for sc in df_zeros.columns]
-    df1 = df[columns_x]
-    df1.columns = df_zeros.columns
-
-    columns_y = [sc + "_y" for sc in df_zeros.columns]
-    df2 = df[columns_y]
-    df2.columns = df_zeros.columns
-
-    return df1.add(df2)
-
-
-def change_tec_lvl_name_to_alltec(names: list):
-    """
-    This function changes name of technology level (for example tec_supply) to "alltec".
-
-    :param names: list of column names
-    :return: list of new column names
-    """
-    new_names = []
-    for i in range(len(names)):
-        tech_name = re.search(".*tec.*", names[i])
-        if tech_name != None:
-            new_names.append("alltec")
-        else:
-            new_names.append(names[i])
-    return new_names
-
-
-def add_dimension(df: pd.DataFrame, new_level: list, new_level_name: str):
-    """
-    This function adds a new level to the index.
-
-    :param df: pd.DataFrame where new level is added
-    :param new_level: list of new level entries
-    :param new_level_name: string of new level
-    :return: DataFrame which has a new dimension with the new_level as its values
-    """
-    final_df = None
-    for item in new_level:
-        temp = pd.concat([df], keys=[item], names=[new_level_name])
-        final_df = pd.concat([final_df, temp])
-    return final_df
-
-
-def extract_horizon_specific_cost(i_cost: pd.DataFrame, scen_hor_map: dict):
-    """
-    This function extracts the horizon specific cost out of the "i_cost" table for a single technology.
-
-    :param i_cost: groupby object split by "alltec" of the i_cost table
-    :param scen_hor_map: dictionary specifying the scenario specific horizons
-    :return: a pd.Series with scenario index and horizon specific costs
-    """
-    cost_vector = pd.Series(None, dtype="Float64", index=i_cost.columns)
-    for scenario in i_cost.columns:
-        horizon = scen_hor_map[scenario]
-        horizon_costs = i_cost[scenario].xs(horizon, level="i_cost")
-        cost_vector[scenario] = horizon_costs.values
-    return cost_vector
-
-
-# Load ,data from SQLites
-
-
-def get_table(
-    scenarios: dict, scenario_id: str, table_name: str, use_name: bool = False
-):
-    """
-    This function loads the scenario specific SQL table and converts it into a pd.DataFrame
-
-    :param scenarios: dictionary with scenario specific information loaded from the yaml file
-    :param scenario_id: string with scenario_id for which the SQL table should be loaded. scenario_id has to match the id in the yaml file
-    :param table_name: string of table name of SQL table which should be converted
-    :param use_name: boolean value whether name of scenario appears as name of column in DataFrame
-    :return: DataFrame with the contents of the SQL table.
-    """
-    path = os.path.join(folder["sql_files"], str(scenario_id) + ".db")
-
-    if not os.path.isfile(path):
-        print("Warning: tables does not exists in scenario id:", scenario_id)
-        return
-
-    try:
-        with contextlib.closing(sqlite3.connect(path)) as connection:
-            query = "SELECT * FROM {}".format(table_name)
-            df = pd.read_sql_query(query, connection)
-            df = df.convert_dtypes()
-
-            if "t" in df.columns:
-                df["t"] = df["t"].astype("int32")
-
-            idx = list(df.columns)
-            if len(idx) > 1:
-                idx.remove("value")
-                df = df.set_index(idx)
-                df = df.rename(
-                    columns={
-                        "value": str(scenarios[scenario_id]["name"])
-                        if use_name
-                        else str(scenario_id)
-                    }
-                )
-
-            df.columns.names = ["scenario"]
-
-        return df
-    except Exception as e:
-        print(e)
-        print(f"Table {table_name} not cannot be queried for scenario {scenario_id}")
-        return None
-
-
-def merge_tables(scenarios: dict, table_name: str, historical: bool = False):
-    """
-    This function concatinates the DataFrames of get_table() by the index.
-
-    :param scenarios: dictionary with scenario specific information loaded from the yaml file
-    :param table_name: string of table name of SQL table which should be converted
-    :return: DataFrame with the contents of the SQL table of name table_name with the scenario names as columns.
-    """
-    dataframes = [
-        get_table(scenarios, scenario_id, table_name, use_name=True)
-        for scenario_id in scenarios
-    ]
-    df = pd.concat(dataframes, axis=1)
-
-    # Needed because otherwise the index name disappears when merging on columns with an empty dataframe
-    for dataframe in dataframes:
-        if dataframe.index.name:
-            df.index.name = dataframe.index.name
-
-    return df
-
-
-class DataHandler:
-    """Class to retrieve SQLite tables, perform additional calculations and store the result in memory"""
-
-    def __init__(self, scenarios):
-        self.scenarios = scenarios
-
-    def __hash__(self):
-        return hash(str(self.scenarios))
-
-    @functools.lru_cache
-    def merge_stored_sets(self, name):
-        # can load unique subsets of technologies or regions
-        return np.unique(self.get(name).values)
-
-    @functools.cached_property
-    def active_scenarios(self):
-        # creates dictionary of scenarios which are marked as active in the yaml files
-        helper_dict = {
-            str(keys): self.scenarios[keys]
-            for keys in self.scenarios.keys()
-            if self.scenarios[keys]["active"]
-        }
-        return helper_dict
-
-    @functools.cached_property
-    def hours(self):
-        # creates dictionary with simulated hour per scenario
-        helper_dict = {
-            str(self.scenarios[keys]["name"]): self.scenarios[keys]["clp"]["--HOURS"]
-            for keys in self.scenarios.keys()
-            if self.scenarios[keys]["active"]
-        }
-        return pd.Series(helper_dict)
-
-    @functools.lru_cache
-    def get(self, table_name, active_only=True):
-        """Merges all tables with a given name and returns a dataframe
-
-        :param table_name: str (can be whatever table name is contained in the SQLite fiels)
-        :return: dataframe with each column being a scenario
-        """
-        scenarios = self.active_scenarios if active_only else self.scenarios
-        return merge_tables(scenarios, table_name)
-
+from postprocess.tools import (
+    add_zeros,
+    add_dimension,
+    change_tec_lvl_name_to_alltec,
+    extract_horizon_specific_cost,
+)
+from postprocess.datahandler import DataHandler
 
 # data processing functions
 
@@ -223,7 +22,8 @@ def market_value(dh: DataHandler):
     :return: pd.DataFrame with market values for every country and technology
     """
     scenario_order = [
-        str(dh.active_scenarios[keys]["name"]) for keys in dh.active_scenarios
+        str(dh.scenarios.active_scenarios[keys]["name"])
+        for keys in dh.scenarios.active_scenarios
     ]
 
     # adding all vintage classes together
@@ -396,7 +196,7 @@ def pdc_pivot(dh: DataHandler):
 
 
 @functools.lru_cache
-def total_investment_costs(dh: DataHandler, scen_hor_map: dict = scen_hor_map):
+def total_investment_costs(dh: DataHandler):
     """
     This function calculates the total investment costs of all regions and technologies.
 
@@ -406,7 +206,9 @@ def total_investment_costs(dh: DataHandler, scen_hor_map: dict = scen_hor_map):
     """
     # discountrate series with index: scenarios
     discount_rate = dh.get("scalars").loc["discountrate", :]
-    sc = 8760 / dh.hours
+    sc = 8760 / dh.scenarios.hours
+
+    scen_hor_map = dh.scenarios.horizon
 
     # investment costs dataframe with columns: scenarios and index: alltec
     inv = dh.get("i_cost").xs("invest", level="par_cost")
@@ -452,7 +254,7 @@ def total_investment_costs(dh: DataHandler, scen_hor_map: dict = scen_hor_map):
 
 
 # @functools.lru_cache
-def variable_costs(dh: DataHandler, scen_hor_map: dict = scen_hor_map):
+def variable_costs(dh: DataHandler):
     """
     This function calculates variable costs of all technologies in all regions.
 
@@ -461,6 +263,8 @@ def variable_costs(dh: DataHandler, scen_hor_map: dict = scen_hor_map):
     :return: pd.DataFrame of the variable costs.
     """
     print("PtHydrogen not implemented")
+
+    scen_hor_map = dh.scenarios.horizon
 
     cost_var = dh.get("i_cost").xs("varcost", level="par_cost")
     cost_var = cost_var.groupby(["alltec"]).apply(

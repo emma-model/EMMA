@@ -36,7 +36,7 @@ scenarios:
       --SI: SENTINEL_EU_CN
   sEU_5:
     name: 2040_EU_EN
-    active: False
+    active: True
     clp:
       --HORIZON: 2040
       --FUTUREVRE: 1

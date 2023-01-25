@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import re
 
+from postprocess.tools import change_tec_lvl_name_to_alltec
+
 schema_dict = {
     "t": {"n": "Time ID", "v": {i: i for i in range(8760 + 1)}},
     "alltec": {
@@ -68,6 +70,7 @@ schema_dict = {
             "RF_2050": "RF2050",
             "RE_2050": "RE2050",
             "P2X_2050": "P2X2050",
+            "EC_2030": "EC2030",
             "2030_EU_CT": "2030_EU_CT",
             "2050_EU_CT": "2050_EU_CT",
             "2030_EU_CN": "2030_EU_CN",
@@ -161,20 +164,6 @@ def renamed_idx(idx: pd.DataFrame):
     idx = rename_idx_values(idx)
     idx = rename_idx_names(idx)
     return idx
-
-
-def change_tec_lvl_name_to_alltec(names: list):
-    """
-    Function changes level name of technology level (for example tec_supply) to alltec
-    """
-    new_names = []
-    for i in range(len(names)):
-        m = re.search(".*tec.*", names[i])
-        if m != None:
-            new_names.append("alltec")
-        else:
-            new_names.append(names[i])
-    return new_names
 
 
 def rename_df_index(df: pd.DataFrame):

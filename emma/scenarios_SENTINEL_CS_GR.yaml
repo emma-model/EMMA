@@ -40,6 +40,23 @@ scenarios:
       --FUTUREVRE: 1
       --SI: SENTINEL_GRC_PX
 
+  sGR_5:
+    name: EC_2030
+    active: False
+    clp:
+      --HORIZON: 2030
+      --FUTUREVRE: 1
+      --SI: SENTINEL_GRC_EC
+
+  sGR_6:
+    name: OG_2030
+    active: False
+    clp:
+      --HORIZON: 2030
+      --FUTUREVRE: 1
+      --SI: SENTINEL_GRC_OG
+
+
 # default
 default_clp:
   --HOURS: 8760

@@ -107,6 +107,83 @@ $IFTHENE.exo_load %EXOLOAD%=='1'
 $ENDIF.exo_load
 
 $offecho
+
+
+$onecho                         > scen\si_SENTINEL_GRC_EC.gms
+    i_CO2cap(allr,"%PROJECT%", "2030")    = 7.0;
+    i_CO2cap(allr,"%PROJECT%", "2050")    = 3.0;
+
+    i_yload("GRC","Electricity","2030")   =  57.3;
+    i_yload("GRC","Electricity","2050")   =  80.3;
+
+    Table Overwrite_fuel(tec_supply,allh) "Table used to overwrite fuel prices"
+                    2016        2030        2050
+        CCGT        17.2        102.71       45.32
+        CCGT_CCS    17.2        102.71       45.32
+        OCGT        17.2        102.71       45.32
+        lign        11.16       11.16       11.16
+        shed      3000.0      3000.0      3000.0;
+    i_fuel(tec_supply,allpro,allh)$Overwrite_fuel(tec_supply,allh) = Overwrite_fuel(tec_supply,allh);
+
+
+    Parameter Overwrite_ETS(allh) "Table used to overwrite carbon price"
+        /2030 = 145.2, 2050 = 114.79/
+    ;
+    i_CO2("ETS",allpro,allh)$Overwrite_ETS(allh) = Overwrite_ETS(allh);
+    
+    i_invemax("PtHydrogen","%HORIZON%",r) =   0.0;
+    i_invemax("CCGT_H2",   "%HORIZON%",r) =   0.0;
+    i_invemax("OCGT_H2",   "%HORIZON%",r) =   0.0;
+
+    
+$IFTHENE.exo_export %EXOEXPORT%=='1'
+    exo_export(t,r)      = i_exo_export(t,'SENTINEL_GRC_RF',r,"%HORIZON%");
+$ENDIF.exo_export
+
+$IFTHENE.exo_load %EXOLOAD%=='1'
+    exo_load(t,r)      = i_exo_load(t,'SENTINEL_GRC_RF',r,"%HORIZON%") / th;
+$ENDIF.exo_load
+
+$offecho
+
+$onecho                         > scen\si_SENTINEL_GRC_OG.gms
+    i_CO2cap(allr,"%PROJECT%", "2030")    = 7.0;
+    i_CO2cap(allr,"%PROJECT%", "2050")    = 3.0;
+
+    i_yload("GRC","Electricity","2030")   =  57.3;
+    i_yload("GRC","Electricity","2050")   =  80.3;
+
+    Table Overwrite_fuel(tec_supply,allh) "Table used to overwrite fuel prices"
+                    2016        2030        2050
+        CCGT        17.2        102.71       45.32
+        CCGT_CCS    17.2        102.71       45.32
+        OCGT        17.2        102.71       45.32
+        lign        11.16       11.16       11.16
+        shed      3000.0      3000.0      3000.0;
+    i_fuel(tec_supply,allpro,allh)$Overwrite_fuel(tec_supply,allh) = Overwrite_fuel(tec_supply,allh);
+
+
+    Parameter Overwrite_ETS(allh) "Table used to overwrite carbon price"
+        /2030 = 145.2, 2050 = 114.79/
+    ;
+    i_CO2("ETS",allpro,allh)$Overwrite_ETS(allh) = Overwrite_ETS(allh);
+    
+    i_invemax("PtHydrogen","%HORIZON%",r) =   0.0;
+    i_invemax("CCGT_H2",   "%HORIZON%",r) =   0.0;
+    i_invemax("OCGT_H2",   "%HORIZON%",r) =   0.0;
+    i_invemax("coal_CCS",  "%HORIZON%",r) =   0.0;
+
+    
+$IFTHENE.exo_export %EXOEXPORT%=='1'
+    exo_export(t,r)      = i_exo_export(t,'SENTINEL_GRC_RF',r,"%HORIZON%");
+$ENDIF.exo_export
+
+$IFTHENE.exo_load %EXOLOAD%=='1'
+    exo_load(t,r)      = i_exo_load(t,'SENTINEL_GRC_RF',r,"%HORIZON%") / th;
+$ENDIF.exo_load
+
+$offecho
+
 * end SENTINEL GREEK CASE STUDY
 
 

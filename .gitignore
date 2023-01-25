@@ -1,12 +1,10 @@
-scen/*
-!scen/si_SENTINEL.gms
+emma/core/scen/*
+!emma/core/scen/si_SENTINEL.gms
 
 **/start
 **/trash
 **/225a
 **/225b
-
-**/test_fd
 **/.idea
 **/.ipynb_checkpoints
 
@@ -19,9 +17,13 @@ scen/*
 **/*.lxi
 
 *.log*
-_*
+_*/
 
 .vscode/
+.vs/
+venv???/
+venv??/
+venv?/
 venv/
 
 #no need to track as it is generated automatically
@@ -29,27 +31,19 @@ venv/
 
 #allows .xlsx only in input and preprocessing
 *.xlsx
-!input/*.xlsx
-!preprocessing/*.xlsx
-!preprocessing/input/*.xlsx
+!emma/core/input/*.xlsx
+!emma/preprocessing/*.xlsx
+!emma/preprocessing/input/*.xlsx
 
 *.g00
 *.db
+*.svg
+*.png
+*.csv
+
 
 log_WARNING*.dat
-
-preprocessing/entsoe_key.py
-preprocessing/net_exports.csv
-preprocessing/when2heat_multiindex.csv
-preprocessing/chp_ts.csv
+preprocessing/friendly_scenarios_2016_1H_2030/
+preprocessing/friendly_scenarios_2016_1H_2050/
 
 
-preprocessing/input/Calliope/net_import_2050.csv
-preprocessing/input/Calliope/net_import_2030.csv
-preprocessing/input/Calliope/flow_in_2050.csv
-preprocessing/input/Calliope/flow_in_2030.csv
-preprocessing/input/Calliope/final_consumption_2050.csv
-preprocessing/input/Calliope/final_consumption_2030.csv
-
-show_dashboard.ipynb
-show_dashboard.ipynb

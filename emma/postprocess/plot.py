@@ -7,8 +7,12 @@ import numpy as np
 
 from dataclasses import dataclass
 from collections import OrderedDict
-from analysis import (
-    add_zeros,
+
+from postprocess.tools import add_zeros
+
+from postprocess.datahandler import DataHandler
+
+from postprocess.analysis import (
     market_value,
     electricity_balance,
     hydrogen_balance,
@@ -16,7 +20,6 @@ from analysis import (
     load_factor,
     total_investment_costs,
     full_load_hours,
-    DataHandler,
 )
 
 
@@ -122,6 +125,7 @@ def stacked_bar_chart(
     color_map: dict,
     ylabel: str,
     renaming_map: dict = id,
+    width: float = 0.8,
 ):
     """
     This function creates a stacked bar chart with costumized colors, a renaming map and a chance to list keys multiple times (for balance plots).
@@ -162,6 +166,7 @@ def stacked_bar_chart(
                     label=renaming_map[i],
                     bottom=bottom,
                     color=color_map[i],
+                    width=width,
                 )
                 bottom += tech.iloc[j, :].clip(lower=0)
                 # Negative
@@ -171,6 +176,7 @@ def stacked_bar_chart(
                     label=renaming_map[i],
                     bottom=bottom_negative,
                     color=color_map[i],
+                    width=width,
                 )
                 bottom_negative += tech.iloc[j, :].clip(upper=0)
 
@@ -182,6 +188,7 @@ def stacked_bar_chart(
                 label=renaming_map[i],
                 bottom=bottom,
                 color=color_map[i],
+                width=width,
             )
             bottom += tech.clip(lower=0)
             # Negative
@@ -191,6 +198,7 @@ def stacked_bar_chart(
                 label=renaming_map[i],
                 bottom=bottom_negative,
                 color=color_map[i],
+                width=width,
             )
             bottom_negative += tech.clip(upper=0)
 
@@ -210,7 +218,12 @@ def stacked_bar_chart(
     return ax
 
 
-def draw_legend(fig: plt.figure, axes: plt.axis, pos: Tuple[float, float] = (1.1, 0.5)):
+def draw_legend(
+    fig: plt.figure,
+    axes: plt.axis,
+    pos: Tuple[float, float] = (1.1, 0.5),
+    ncol: int = 1,
+):
     """
     This function draws a legend of the unionized labels and handels of all plots in axes.
 
@@ -231,7 +244,9 @@ def draw_legend(fig: plt.figure, axes: plt.axis, pos: Tuple[float, float] = (1.1
     handles.reverse()
     labels.reverse()
     by_label = dict(zip(labels, handles))
-    fig.legend(by_label.values(), by_label.keys(), loc="center", bbox_to_anchor=pos)
+    fig.legend(
+        by_label.values(), by_label.keys(), loc="center", bbox_to_anchor=pos, ncol=ncol
+    )
     return axes
 
 
@@ -410,8 +425,8 @@ class PlotHandler:
             co2_cap.values.max() * cap_height, index=co2_cap.index
         )
         i = 0
-        for keys in self.dh.scenarios:
-            if self.dh.scenarios[keys]["clp"]["--CARBONCAP"] != 1:
+        for keys in self.dh.scenarios.params:
+            if self.dh.scenarios.params[keys]["clp"]["--CARBONCAP"] != 1:
                 cap_height_series.iloc[i, :] = 0
             i += 1
 
