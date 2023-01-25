@@ -1,0 +1,43 @@
+scenarios:
+  d0:
+    name: 2016
+    active: True
+    clp:
+      --HORIZON: 2016
+      --SHORTTERM: 1
+      --CARBONCAP: 0
+  d1:
+    name: 2030
+    active: True
+    clp:
+      --HORIZON: 2030
+      --FUTUREVRE: 1
+  d2:
+    name: 2040
+    active: True
+    clp:
+      --HORIZON: 2040
+      --FUTUREVRE: 1
+  d3:
+    name: 2050
+    active: True
+    clp:
+      --HORIZON: 2050
+      --FUTUREVRE: 1
+  d4:
+    name: LTE
+    active: True
+    clp:
+      --HORIZON: LTE
+      --FUTUREVRE: 1
+
+# default
+default_clp:
+  --HOURS: 100
+  --AVAIL: future
+  --REGIONS: 12R
+  --CHP: 1
+  --CCS: 1
+  --CARBONCAP: 1
+  --RAMPING: 1
+  --WeatherYEAR: 2016

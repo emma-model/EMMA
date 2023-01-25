@@ -1,0 +1,1 @@
+execute "gdx2sqlite -i %GDX_FILE% -o %SQL_FILE%";

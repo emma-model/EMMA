@@ -1,3 +1,6 @@
-PyYAML >= 5.4.1
-pandas >= 1.1.5
-matplotlib >= 3.3.3
+matplotlib
+numpy
+openpyxl
+pandas
+pytest
+PyYAML
